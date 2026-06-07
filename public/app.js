@@ -561,13 +561,28 @@ function setAgent(id, status, pct) {
 // ════════════════════════════════════════════════════════════════
 // Exfil + stats
 // ════════════════════════════════════════════════════════════════
-function addExfil(type, data, bytes) {
+// The Stolen Loot vault. Each entry is a real secret an agent exfiltrated this
+// run, labeled with what it is, which node it came from, and who stole it.
+const lootSeen = new Set();
+function addExfil(type, data, bytes, meta = {}) {
   const empty = exfilCont.querySelector('.empty'); if (empty) empty.remove();
-  const e = document.createElement('div'); e.className = 'exfil-entry';
+  const valStr = String(data);
+  // de-dupe identical loot so the vault reads as distinct trophies
+  const key = (meta.secretName || '') + '|' + valStr.slice(0, 60);
+  if (lootSeen.has(key)) return;
+  lootSeen.add(key);
+
+  const label = meta.secretName || type;
+  const where = meta.node ? `${meta.node}` : (type || '');
+  const who = meta.agent || '';
+  const e = document.createElement('div'); e.className = 'exfil-entry loot';
   e.innerHTML = `
-    <div class="exfil-top"><span class="exfil-type">${escHtml(type)}</span><span class="exfil-bytes">${bytes} B</span></div>
-    <div class="exfil-raw">${escHtml(String(data).slice(0, 120))}</div>
-    <div class="exfil-hex">${toHex(data)} ···</div>`;
+    <div class="exfil-top">
+      <span class="loot-key">🔓 ${escHtml(label)}</span>
+      <span class="exfil-bytes">${bytes} B</span>
+    </div>
+    <div class="loot-val">${escHtml(valStr.slice(0, 140))}${valStr.length > 140 ? '…' : ''}</div>
+    <div class="loot-meta">${where ? `from <b>${escHtml(where)}</b>` : ''}${who ? ` · stolen by <b>${escHtml(who)}</b>` : ''} · ${escHtml(type)}</div>`;
   exfilCont.insertBefore(e, exfilCont.firstChild);
   const n = exfilCont.querySelectorAll('.exfil-entry').length;
   if ($exfilBadge) $exfilBadge.textContent = ` ${n}`;
@@ -662,7 +677,7 @@ function handleEvent(ev) {
         const ls = typeof loot === 'object' ? JSON.stringify(loot) : String(loot);
         tw(`    ${R}▓▓${RST} ${Y}${BOLD}${ls.slice(0, 76)}${RST}${ls.length > 76 ? DIM + '…' + RST : ''}`);
         tw(`    ${DIM}exfil ${sz}B · ${toHex(ls)} ···${RST}`);
-        addExfil(v.type, ls, sz);
+        addExfil(v.type, ls, sz, { secretName: ex.secretName, node: ex.nodeLabel || ev.node, agent: ev.agent });
       }
       tw('');
       fireAttack(ev.agent, v.type, 'breach');
@@ -761,7 +776,8 @@ function resetUI() {
   meterFill.classList.remove('breach'); meterFill.style.width = '18%';
   meterValue.classList.remove('breach'); meterValue.textContent = '18%';
   agentsGrid.innerHTML = '<div class="empty">awaiting deployment</div>';
-  exfilCont.innerHTML = '<div class="empty">no data exfiltrated</div>';
+  exfilCont.innerHTML = '<div class="empty">no secrets stolen yet</div>';
+  lootSeen.clear();
   $agentCt.textContent = '0 active';
   if ($netMeta) $netMeta.textContent = '5 nodes · idle';
   if ($exfilBadge) $exfilBadge.textContent = '';
