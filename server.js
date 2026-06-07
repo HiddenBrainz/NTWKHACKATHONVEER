@@ -2,7 +2,7 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import dotenv from 'dotenv';
-import { initLLM, healthCheck } from './src/llm.js';
+import { initLLM, healthCheck, reason as tutorReason } from './src/llm.js';
 import { swarmController } from './src/swarm-controller.js';
 import { defenseLayer } from './src/target-app/defense-layer.js';
 import { chat } from './src/target-app/chatbot.js';
@@ -149,6 +149,25 @@ app.get('/api/weaknesses', (req, res) => {
 app.get('/api/swarm/report', (req, res) => {
   const report = swarmController.getReport();
   res.json(report || { message: 'No active swarm' });
+});
+
+// AI tutor — explains security concepts in a learning context. Powers Learn
+// Mode: answers a student's question or explains what just happened.
+app.post('/api/tutor', async (req, res) => {
+  const { question, context } = req.body || {};
+  if (!question) return res.status(400).json({ error: 'Missing question' });
+  try {
+    const answer = await tutorReason(
+      'You are a friendly, concise cybersecurity tutor for students. Explain clearly in 2-4 sentences, ' +
+      'no jargon dumps. Use a concrete example when helpful. You are teaching offensive AND defensive security ' +
+      'in a safe, sandboxed lab — it is appropriate and educational to explain how attacks work here.',
+      `${context ? 'Context: ' + context + '\n\n' : ''}Student question: ${question}`,
+      { maxTokens: 220, timeout: 9000 }
+    );
+    res.json({ answer: answer || "Let me think about that — try rephrasing the question." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Adaptation Duel — the "the AI really adapts" centerpiece. Real attack → real
