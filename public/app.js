@@ -796,6 +796,11 @@ function setupControls() {
   document.getElementById('duelBtn')?.addEventListener('click', () => { cmdDuel(); term && term.focus(); });
   stopBtn && stopBtn.addEventListener('click', () => { cmdStop(); term && term.focus(); });
   resetBtn.addEventListener('click', () => { cmdReset(); term && term.focus(); });
+  // Quick-inject buttons: one click fires a real payload at the live target.
+  document.querySelectorAll('.qi-btn').forEach(b => b.addEventListener('click', () => {
+    sendManualAttack(b.dataset.payload);
+    term && term.focus();
+  }));
 }
 function connectStream() {
   const es = new EventSource('/api/stream');

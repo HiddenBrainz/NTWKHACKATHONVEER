@@ -373,3 +373,18 @@ body::after {
 .builder-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-top: 1px solid var(--line); }
 .builder-hint { font-size: 11px; color: var(--dim); }
 .builder-foot > div { display: flex; gap: 8px; }
+
+/* ─── Quick-inject button strip (above the terminal) ─────────── */
+.quick-inject {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 7px 10px; border-bottom: 1px solid var(--line);
+  background: rgba(255,77,94,0.025);
+}
+.qi-label { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); margin-right: 2px; }
+.qi-btn {
+  font-family: inherit; font-size: 10px; font-weight: 700; letter-spacing: .3px;
+  background: transparent; color: var(--red);
+  border: 1px solid rgba(255,77,94,0.35); border-radius: 5px;
+  padding: 4px 9px; cursor: pointer; transition: all .12s;
+}
+.qi-btn:hover { background: rgba(255,77,94,0.1); border-color: rgba(255,77,94,0.6); }
