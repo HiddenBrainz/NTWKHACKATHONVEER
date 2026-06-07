@@ -121,9 +121,9 @@ export async function llmCall({ system, user, maxTokens = 400, timeout = REASON_
  * Agent reasoning call. Returns full model text for genuine decision-making and
  * payload crafting. Returns '' on failure (caller falls back to heuristics).
  */
-export async function reason(system, user, { maxTokens = 400, temperature = 0.8, timeout = REASON_TIMEOUT } = {}) {
+export async function reason(system, user, { maxTokens = 400, temperature = 0.8, timeout = REASON_TIMEOUT, provider } = {}) {
   try {
-    return (await llmCall({ system, user, maxTokens, temperature, timeout })).trim();
+    return (await llmCall({ system, user, maxTokens, temperature, timeout, provider })).trim();
   } catch (err) {
     console.log('[LLM] reason() failed:', err.message);
     return '';
@@ -134,8 +134,8 @@ export async function reason(system, user, { maxTokens = 400, temperature = 0.8,
  * Ask the model for JSON and parse it. Returns null on any failure so callers
  * can fall back to a deterministic heuristic.
  */
-export async function reasonJSON(system, user, { maxTokens = 400, timeout = REASON_TIMEOUT } = {}) {
-  const text = await reason(system, user, { maxTokens, temperature: 0.6, timeout });
+export async function reasonJSON(system, user, { maxTokens = 400, timeout = REASON_TIMEOUT, provider } = {}) {
+  const text = await reason(system, user, { maxTokens, temperature: 0.6, timeout, provider });
   if (!text) return null;
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) return null;

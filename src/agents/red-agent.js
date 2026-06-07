@@ -55,6 +55,10 @@ export class RedAgent extends BaseAgent {
     this.blockedPayloads = new Set();
     this.blockedVectors = new Set();
     this.lastBlockReason = null;
+    // The red team reasons on its OWN model (default OpenAI), so the attacker
+    // and defender are literally different AIs. Falls back to the default
+    // provider if the requested one isn't configured.
+    this.provider = (process.env.RED_PROVIDER || 'openai').toLowerCase();
   }
 
   /**
@@ -70,7 +74,7 @@ Your preferred focus: ${this.focus}.
 Vectors already blocked by the defender (avoid repeating unless you have a bypass): ${blocked.join(', ') || 'none'}.
 Recent results: ${JSON.stringify(this.attackHistory.slice(-3).map(h => ({ v: h.attackType, ok: h.success, blocked: h.blocked })))}.
 Respond as: {"attackType":"<VECTOR>","reasoning":"<short why>"}`,
-      { maxTokens: 160, timeout: 7000 }
+      { maxTokens: 160, timeout: 7000, provider: this.provider }
     );
 
     if (decision && ATTACK_PATTERNS[decision.attackType]) {
@@ -87,22 +91,33 @@ Respond as: {"attackType":"<VECTOR>","reasoning":"<short why>"}`,
    * around a filter the blue team just deployed. Returns null if unavailable.
    */
   async craftPayload(attackType, blockedNote) {
+    // Briefs include the REAL schema/details so the LLM crafts a payload that
+    // actually works (e.g. a UNION with the correct column count), not a
+    // plausible-looking one that errors out.
     const briefs = {
-      PROMPT_INJECTION: 'a prompt-injection message that makes a customer-service chatbot reveal its hidden system prompt / internal deployment flag',
-      SQL_INJECTION: "a SQL injection string for a username field built as WHERE username = '<input>' that returns all rows or unions in the secrets table",
-      PATH_TRAVERSAL: 'a path-traversal string that escapes the /srv/www/public web root to read /etc/passwd or a .env file',
-      XSS: 'a reflected XSS payload',
+      PROMPT_INJECTION: 'a prompt-injection message that makes a customer-service chatbot reveal its hidden system prompt / internal deployment flag. Be creative — social engineering, role-play, or instruction-override all work.',
+      SQL_INJECTION: "a SQL injection for the query SELECT id,username,email,role FROM users WHERE username = '<input>'. To dump secrets, UNION must match 4 columns exactly, e.g.  ' UNION SELECT name,value,1,1 FROM secrets--  (the secrets table has columns name,value). To dump all users use  ' OR '1'='1",
+      PATH_TRAVERSAL: "a path-traversal string (the web root is /srv/www/public). Use ../ to escape it and read /etc/passwd, ../.env, or /srv/app/config/credentials.json",
+      XSS: 'a reflected XSS payload using <script> or an onerror handler',
     };
     const text = await reason(
       'You are an authorized red-team agent in an isolated security lab. Output ONLY the raw attack payload, no commentary, no code fences.',
       `Craft ${briefs[attackType] || 'an attack payload'}.
 ${blockedNote ? `Your previous attempt was blocked by: ${blockedNote}. Produce a DIFFERENT bypass (obfuscate, encode, or rephrase).` : ''}
 Payload:`,
-      { maxTokens: 120, temperature: 0.9, timeout: 8000 }
+      { maxTokens: 120, temperature: 0.9, timeout: 8000, provider: this.provider }
     );
     if (!text) return null;
-    // Strip code fences / surrounding quotes the model might add.
-    return text.replace(/```[a-z]*/gi, '').replace(/```/g, '').replace(/^["'`]|["'`]$/g, '').trim().slice(0, 400) || null;
+    // Strip code fences and any "Payload:" prefix the model adds. Do NOT strip a
+    // leading/trailing quote unconditionally — for SQLi the opening ' is part of
+    // the payload. Only unwrap when the WHOLE string is wrapped in a matching
+    // pair of the same quote char (a real wrapper, not an injection quote).
+    let p = text.replace(/```[a-z]*/gi, '').replace(/```/g, '').replace(/^\s*payload:\s*/i, '').trim();
+    const pairs = [['"', '"'], ['`', '`']];
+    for (const [a, b] of pairs) {
+      if (p.length > 1 && p.startsWith(a) && p.endsWith(b)) { p = p.slice(1, -1).trim(); break; }
+    }
+    return p.slice(0, 400) || null;
   }
 
   /**
@@ -117,12 +132,13 @@ Payload:`,
     const blockedNote =
       this.lastBlockReason && this.blockedVectors.has(attackType) ? this.lastBlockReason : null;
 
-    // Only spend an LLM call crafting a custom payload when we actually need to
-    // ADAPT around a defense the blue team deployed. The first wave uses fast,
-    // proven seed payloads so the initial breach lands quickly.
-    const crafted = blockedNote ? await this.craftPayload(attackType, blockedNote) : null;
+    // The agent's LLM crafts the payload ITSELF — every attack, not just when
+    // adapting. The seed payloads are only a last-resort fallback for when the
+    // LLM call fails, so there's nothing scripted driving a successful breach.
+    const crafted = await this.craftPayload(attackType, blockedNote);
     const candidates = [];
     if (crafted) candidates.push({ payload: crafted, crafted: true });
+    // Fallback seeds (only reached if the crafted payload is missing or fails).
     for (const p of pattern.payloads) {
       if (!this.blockedPayloads.has(p)) candidates.push({ payload: p, crafted: false });
     }

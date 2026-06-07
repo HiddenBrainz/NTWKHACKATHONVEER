@@ -34,6 +34,9 @@ export class BlueAgent extends BaseAgent {
     this.deployedDefenses = new Map(); // endpoint -> defense type (local mirror)
     this.detectedAttacks = [];
     this.patchHistory = [];
+    // The blue team reasons on its OWN model (default Claude) — a different AI
+    // than the red attacker. Falls back to the default provider if unavailable.
+    this.provider = (process.env.BLUE_PROVIDER || 'anthropic').toLowerCase();
   }
 
   /**
@@ -78,7 +81,7 @@ export class BlueAgent extends BaseAgent {
     const rationale = await reason(
       'You are a blue-team defender. In ONE short sentence, justify the chosen countermeasure for the observed attack.',
       `Observed ${threat.attackType || 'attack'} on ${endpoint} (payload: ${String(threat.payload).slice(0, 120)}). Chosen defense: ${HUMAN[defenseType]}. Justify briefly.`,
-      { maxTokens: 60, timeout: 6000 }
+      { maxTokens: 60, timeout: 6000, provider: this.provider }
     );
 
     const result = this.deployDefense(endpoint, defenseType, {

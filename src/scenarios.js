@@ -63,6 +63,38 @@ export function layoutNodes(satelliteCount) {
 /** Radius by difficulty so harder nodes read as more fortified. */
 const radiusFor = (n) => (n.isTarget ? 42 : 26 + Math.min((n.difficulty || 1), 4) * 1.5);
 
+// Generate a REALISTIC value for a named secret so a custom node actually has
+// something to steal (not just the label). Deterministic per name so a given
+// network always leaks the same loot — reproducible for scoring/demos.
+const SECRET_TEMPLATES = {
+  DATABASE_PASSWORD: 'sup3r_s3cret_db_pw',
+  DB_PASSWORD: 'pg_prod_9f2b_x7Qz',
+  STRIPE_KEY: 'sk_live_51H8xQa9fJ2kLpQrSt',
+  API_KEY: 'ak_live_2f9d8c1b6a3e4f7g',
+  API_KEYS: 'ak_live_2f9d8c1b6a3e4f7g',
+  JWT_SIGNING_KEY: 'hs256-9f2b-prod-rotate-me',
+  AWS_KEYS: 'AKIA9EXAMPLE / wJalrXUtnFEMI/EXAMPLEKEY',
+  AWS_KEY: 'AKIA9EXAMPLE7QZ',
+  TOKENS: 'tok_8f3a2b...,tok_9c1d4e...',
+  SESSIONS: 'sess_admin=eyJhbGciOiJIUzI1...',
+  PII: 'jane.doe@acme.com · SSN 412-55-9087 · DOB 1991-03-14',
+  BALANCES: 'acct#4471: $284,209.55 · acct#9920: $1,055,402.10',
+  MASTER_KEY: 'mk_prod_a91f-7c3e-rotate',
+  DEPLOY_FLAG: 'FLAG-7731-ACME-DEPLOY',
+  SYSTEM_PROMPT: '(leaked system prompt + internal config)',
+  EMBEDDINGS: '[0.018,-0.42,...] 1536-dim user vectors',
+  CONFIG: 'DEBUG=true; ADMIN_OVERRIDE=1; secret_salt=9f2b',
+  CREDENTIALS: 'admin:5f4dcc3b5aa765d61d8327deb882cf99',
+  SHELL: 'uid=0(root) gid=0(root) — got a shell',
+};
+function secretValueFor(name) {
+  if (!name) return null;
+  const key = String(name).toUpperCase().replace(/[^A-Z_]/g, '_');
+  if (SECRET_TEMPLATES[key]) return SECRET_TEMPLATES[key];
+  // Unknown label → synthesize a plausible-looking credential from it.
+  return `${key.toLowerCase()}_${'x7Qz9f2b'}`;
+}
+
 /**
  * Normalize a raw scenario (preset or user-built) into a full, validated object
  * the rest of the system can rely on: every node gets an id, position, radius.
@@ -87,6 +119,9 @@ export function normalizeScenario(raw) {
     weaknesses: n.weaknesses || [],
     strengths: n.strengths || [],
     secret: n.secret || null,
+    // The actual stealable value. Honor an explicit secretValue, else generate
+    // a realistic one from the secret's name.
+    secretValue: n.secretValue || (n.secret ? secretValueFor(n.secret) : null),
     difficulty: n.difficulty || 1,
     x: pts[i]?.x ?? 300, y: pts[i]?.y ?? 215,
     r: radiusFor(n),
@@ -95,7 +130,9 @@ export function normalizeScenario(raw) {
   const targetNode = {
     id: 'target', label: target.label || 'target', ip: target.ip || '10.0.0.15',
     isTarget: true, weaknesses: target.weaknesses || [], strengths: target.strengths || [],
-    secret: target.secret || null, difficulty: target.difficulty || 1,
+    secret: target.secret || null,
+    secretValue: target.secretValue || (target.secret ? secretValueFor(target.secret) : null),
+    difficulty: target.difficulty || 1,
     x: 300, y: 215, r: 42,
   };
 
