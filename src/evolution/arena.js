@@ -33,8 +33,8 @@ export class CoevolutionArena {
     this.broadcast = broadcast || (() => {});
     this.engine = new GeneticEngine({
       populationSize: opts.populationSize || 12,
-      eliteCount: 2,
-      mutationRate: 0.6,
+      eliteCount: 3,
+      mutationRate: 0.35, // low enough that winning combos propagate, not just elites
       geneSynth: synthesizeGene, // LLM invents novel genes when a key is present
     });
     this.firewall = new VectorFirewall();
@@ -112,6 +112,7 @@ export class CoevolutionArena {
       blueElo: this.blueElo,
       firewall: this.firewall.snapshot(),
       safeCentroid: project(this.firewall.safeCentroid),
+      benignPoints: this.firewall.benignSamples,
     });
     this._ledger('arena_started', { provider, pop: this.engine.populationSize });
 

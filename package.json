@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "test:llm": "node test-llm.js"
+    "test:llm": "node test-llm.js",
+    "test:arena": "node test-arena.js",
+    "test:live": "node test-live-arena.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",

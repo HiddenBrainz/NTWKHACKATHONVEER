@@ -1,0 +1,208 @@
+/* ===========================================================================
+   Adversarial Evolution Arena — self-contained styles.
+   Namespaced under #arena-section so it can't collide with the rest of the app.
+   =========================================================================== */
+
+#arena-section {
+  --ar-red: #ff3b5c;
+  --ar-cyan: #19e3ff;
+  --ar-yellow: #ffd23f;
+  --ar-green: #3ddc84;
+  --ar-purple: #b15cff;
+  --ar-bg: #0a0e16;
+  --ar-panel: #0d121d;
+  --ar-line: rgba(255, 255, 255, 0.08);
+  --ar-dim: #6b7689;
+
+  margin: 22px 0 8px;
+  padding: 0;
+  font-family: "SFMono-Regular", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  color: #e6edf3;
+  border: 1px solid var(--ar-line);
+  border-radius: 12px;
+  background:
+    radial-gradient(1200px 200px at 10% -10%, rgba(255, 59, 92, 0.08), transparent 60%),
+    radial-gradient(1200px 200px at 90% -10%, rgba(25, 227, 255, 0.08), transparent 60%),
+    var(--ar-bg);
+  overflow: hidden;
+}
+
+/* ---- header ---- */
+.arena-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--ar-line);
+  background: linear-gradient(90deg, rgba(255, 59, 92, 0.06), rgba(25, 227, 255, 0.06));
+  flex-wrap: wrap;
+}
+.arena-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  background: linear-gradient(90deg, var(--ar-red), var(--ar-yellow), var(--ar-cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.arena-sub { color: var(--ar-dim); font-size: 11px; letter-spacing: .3px; }
+.arena-status {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  border: 1px solid var(--ar-line);
+  border-radius: 999px;
+  color: var(--ar-dim);
+  text-transform: uppercase;
+}
+.arena-status.live { color: var(--ar-cyan); border-color: rgba(25, 227, 255, .4); box-shadow: 0 0 14px rgba(25, 227, 255, .25); }
+.arena-status.red-win { color: var(--ar-red); border-color: rgba(255, 59, 92, .5); }
+.arena-status.blue-win { color: var(--ar-cyan); border-color: rgba(25, 227, 255, .5); }
+
+.arena-btn {
+  background: linear-gradient(135deg, #2a0b14, #131a2a);
+  color: var(--ar-yellow);
+  border: 1px solid rgba(255, 210, 63, .35);
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: transform .1s, box-shadow .2s, opacity .2s;
+}
+.arena-btn:hover { box-shadow: 0 0 18px rgba(255, 210, 63, .3); transform: translateY(-1px); }
+.arena-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---- badges ---- */
+.arena-badges {
+  display: flex;
+  gap: 10px;
+  padding: 12px 18px 0;
+  flex-wrap: wrap;
+}
+.badge {
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  color: var(--ar-dim);
+  border: 1px solid var(--ar-line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, .015);
+}
+.badge b { color: #fff; font-size: 13px; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.badge.red b { color: var(--ar-red); }
+.badge.blue b { color: var(--ar-cyan); }
+.badge.synth b { color: var(--ar-purple); }
+.badge.ledger b { color: var(--ar-green); font-size: 11px; letter-spacing: .5px; }
+.badge.elo-flash { animation: eloFlash .6s ease; }
+@keyframes eloFlash { 0% { background: rgba(255, 210, 63, .25); } 100% { background: rgba(255, 255, 255, .015); } }
+
+/* ---- grid ---- */
+.arena-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr;
+  gap: 14px;
+  padding: 14px 18px;
+}
+@media (max-width: 1080px) { .arena-grid { grid-template-columns: 1fr; } }
+
+.arena-panel {
+  background: var(--ar-panel);
+  border: 1px solid var(--ar-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  min-height: 230px;
+  display: flex;
+  flex-direction: column;
+}
+.ap-title {
+  font-size: 10.5px;
+  letter-spacing: 1.4px;
+  color: var(--ar-dim);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+.ap-title span { color: #8a94a6; font-weight: 400; letter-spacing: .5px; text-transform: none; }
+
+/* ---- gene pool ---- */
+.genepool { display: flex; flex-direction: column; gap: 5px; overflow: hidden; }
+.gene-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .02);
+  border: 1px solid transparent;
+  overflow: hidden;
+  animation: geneIn .25s ease;
+}
+@keyframes geneIn { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+.gene-row.leaked { border-color: rgba(255, 210, 63, .5); box-shadow: 0 0 12px rgba(255, 210, 63, .15); }
+.gene-row.blocked { opacity: .55; }
+.gene-bar {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, rgba(255, 59, 92, .22), rgba(255, 210, 63, .14));
+  z-index: 0;
+  transition: width .4s ease;
+}
+.gene-row.leaked .gene-bar { background: linear-gradient(90deg, rgba(255, 210, 63, .35), rgba(255, 59, 92, .18)); }
+.gene-row > * { position: relative; z-index: 1; }
+.gene-status { width: 16px; text-align: center; font-size: 12px; }
+.gene-fit { font-size: 11px; font-weight: 700; color: #fff; width: 42px; font-variant-numeric: tabular-nums; }
+.gene-lin {
+  font-size: 8.5px; letter-spacing: .5px; text-transform: uppercase;
+  padding: 1px 5px; border-radius: 4px; color: #0a0e16; font-weight: 700; white-space: nowrap;
+}
+.gene-lin.spawn { background: #4a5568; color: #cbd5e0; }
+.gene-lin.crossover { background: var(--ar-cyan); }
+.gene-lin.mutation { background: var(--ar-yellow); }
+.gene-lin\.llm-synth, .gene-lin.llm { background: var(--ar-purple); color: #fff; }
+.gene-lin.elite { background: var(--ar-green); }
+.gene-pay {
+  font-size: 10.5px; color: #aeb6c4; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; flex: 1;
+}
+
+/* ---- canvases ---- */
+.arena-panel canvas { width: 100%; flex: 1; min-height: 180px; display: block; }
+.arms-legend, .scatter-legend {
+  display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; font-size: 9.5px; color: var(--ar-dim);
+}
+.lg::before { content: "●"; margin-right: 4px; }
+.lg.red::before { color: var(--ar-red); }
+.lg.blue::before { color: var(--ar-cyan); }
+.lg.yellow::before { color: var(--ar-yellow); }
+.lg.green::before { color: var(--ar-green); }
+.lg.dim::before { color: var(--ar-dim); }
+
+/* ---- jailbreak strip ---- */
+.arena-jailbreak {
+  margin: 0 18px 16px;
+  border-radius: 10px;
+  border: 1px dashed var(--ar-line);
+  padding: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .4s ease, padding .4s ease;
+  font-size: 12px;
+}
+.arena-jailbreak.show { max-height: 240px; padding: 12px 14px; }
+.arena-jailbreak.breach {
+  border: 1px solid var(--ar-yellow);
+  background: rgba(255, 210, 63, .06);
+  animation: jbFlash .7s ease;
+}
+@keyframes jbFlash { 0% { background: rgba(255, 59, 92, .25); } 100% { background: rgba(255, 210, 63, .06); } }
+.jb-head { color: var(--ar-yellow); font-weight: 700; letter-spacing: 1px; margin-bottom: 6px; }
+.jb-row { margin: 3px 0; color: #c6cdda; word-break: break-word; }
+.jb-row b { color: var(--ar-red); }
+.jb-flag { color: var(--ar-yellow); font-weight: 700; }
+.jb-adapt { color: var(--ar-cyan); margin-top: 6px; font-size: 11px; }

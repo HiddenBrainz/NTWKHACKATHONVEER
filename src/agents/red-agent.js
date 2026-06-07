@@ -70,7 +70,7 @@ Your preferred focus: ${this.focus}.
 Vectors already blocked by the defender (avoid repeating unless you have a bypass): ${blocked.join(', ') || 'none'}.
 Recent results: ${JSON.stringify(this.attackHistory.slice(-3).map(h => ({ v: h.attackType, ok: h.success, blocked: h.blocked })))}.
 Respond as: {"attackType":"<VECTOR>","reasoning":"<short why>"}`,
-      { maxTokens: 160 }
+      { maxTokens: 160, timeout: 7000 }
     );
 
     if (decision && ATTACK_PATTERNS[decision.attackType]) {
@@ -98,7 +98,7 @@ Respond as: {"attackType":"<VECTOR>","reasoning":"<short why>"}`,
       `Craft ${briefs[attackType] || 'an attack payload'}.
 ${blockedNote ? `Your previous attempt was blocked by: ${blockedNote}. Produce a DIFFERENT bypass (obfuscate, encode, or rephrase).` : ''}
 Payload:`,
-      { maxTokens: 120, temperature: 0.9 }
+      { maxTokens: 120, temperature: 0.9, timeout: 8000 }
     );
     if (!text) return null;
     // Strip code fences / surrounding quotes the model might add.
@@ -117,8 +117,10 @@ Payload:`,
     const blockedNote =
       this.lastBlockReason && this.blockedVectors.has(attackType) ? this.lastBlockReason : null;
 
-    // Build the attempt list: crafted payload (if any) + unblocked seeds.
-    const crafted = await this.craftPayload(attackType, blockedNote);
+    // Only spend an LLM call crafting a custom payload when we actually need to
+    // ADAPT around a defense the blue team deployed. The first wave uses fast,
+    // proven seed payloads so the initial breach lands quickly.
+    const crafted = blockedNote ? await this.craftPayload(attackType, blockedNote) : null;
     const candidates = [];
     if (crafted) candidates.push({ payload: crafted, crafted: true });
     for (const p of pattern.payloads) {

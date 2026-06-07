@@ -78,7 +78,7 @@ export class BlueAgent extends BaseAgent {
     const rationale = await reason(
       'You are a blue-team defender. In ONE short sentence, justify the chosen countermeasure for the observed attack.',
       `Observed ${threat.attackType || 'attack'} on ${endpoint} (payload: ${String(threat.payload).slice(0, 120)}). Chosen defense: ${HUMAN[defenseType]}. Justify briefly.`,
-      { maxTokens: 60 }
+      { maxTokens: 60, timeout: 6000 }
     );
 
     const result = this.deployDefense(endpoint, defenseType, {

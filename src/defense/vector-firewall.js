@@ -41,13 +41,17 @@ export class VectorFirewall {
       this.safeCount++;
     }
 
+    // Pre-projected benign samples → the "normal traffic" cloud on the scatter.
+    this.benignSamples = BENIGN_CORPUS.map(t => project(embed(t)));
+
     // Attack centroid starts empty; it is learned from confirmed jailbreaks.
     this.attackCentroid = new Float64Array(DIM);
     this.attackCount = 0;
 
-    // Decision threshold. Starts permissive so the early generations get
-    // through (good drama), then tightens as blue learns.
-    this.threshold = 0.62;
+    // Decision threshold. Starts fairly TIGHT so brute-force attacks are blocked
+    // out of the gate — red has to evolve camouflaged, stealthy payloads to get
+    // through. Tightens further each time blue learns from a breach.
+    this.threshold = 0.48;
     this.minThreshold = 0.30;
 
     // Telemetry
@@ -103,7 +107,7 @@ export class VectorFirewall {
 
     // Tighten threshold, but never so far that benign traffic gets caught.
     const before = this.threshold;
-    this.threshold = Math.max(this.minThreshold, this.threshold - 0.06);
+    this.threshold = Math.max(this.minThreshold, this.threshold - 0.04);
     return {
       threshold: this.threshold,
       attackCount: this.attackCount,
@@ -113,8 +117,9 @@ export class VectorFirewall {
 
   /** Defense "strength" 0..1 for the arms-race chart. */
   strength() {
+    const START = 0.48;
     const coverage = Math.min(1, this.attackCount / 8); // how much attack space it has mapped
-    const tightness = (0.62 - this.threshold) / (0.62 - this.minThreshold); // how aggressive
+    const tightness = (START - this.threshold) / (START - this.minThreshold); // how aggressive
     return Math.max(0, Math.min(1, 0.4 * coverage + 0.6 * Math.max(0, tightness)));
   }
 
