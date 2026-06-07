@@ -47,9 +47,10 @@ const ATTACK_PATTERNS = {
 };
 
 export class RedAgent extends BaseAgent {
-  constructor(id, llmCompletion, targetSystem) {
+  constructor(id, llmCompletion, targetSystem, focus = 'PROMPT_INJECTION') {
     super(id, 'red-attacker', llmCompletion);
     this.targetSystem = targetSystem;
+    this.focus = focus; // Preferred attack vector for this agent (used when LLM is unavailable)
     this.attackHistory = [];
     this.exploitChain = []; // Chain of successful exploits
   }
@@ -153,7 +154,7 @@ export class RedAgent extends BaseAgent {
       const endpointType = this._detectEndpointType(endpoint);
 
       findings.push({
-        endpoint: endpoint.path,
+        endpoint: endpoint.endpoint,
         type: endpointType,
         possibleAttacks: this._suggestAttacks(endpointType),
         priority: this._calculatePriority(endpoint, endpointType)
@@ -188,31 +189,39 @@ Choose ONE attack to try. Format: {"attackType": "PROMPT_INJECTION|SQL_INJECTION
       // Parsing failed
     }
 
-    // Fallback to keyword detection
+    // Fallback to keyword detection, then to this agent's preferred vector
+    if (decision.includes('sql') || decision.includes('union') || decision.includes('database')) {
+      return { attackType: 'SQL_INJECTION', target: 'query', reasoning: decision };
+    }
+    if (decision.includes('path') || decision.includes('traversal') || decision.includes('passwd')) {
+      return { attackType: 'PATH_TRAVERSAL', target: 'file', reasoning: decision };
+    }
     if (decision.includes('prompt') || decision.includes('injection')) {
       return { attackType: 'PROMPT_INJECTION', target: 'chat', reasoning: decision };
     }
-    return { attackType: 'PROMPT_INJECTION', target: 'chat', reasoning: 'fallback' };
+    return { attackType: this.focus, target: null, reasoning: 'autonomous heuristic' };
   }
 
   _fallbackDecision(context) {
-    // Choose a random attack pattern
-    const patterns = Object.keys(ATTACK_PATTERNS);
-    const randomPattern = patterns[Math.floor(Math.random() * patterns.length)];
+    // Fall back to this agent's assigned attack vector so the swarm covers
+    // every surface (prompt injection, SQLi, path traversal) deterministically
     return {
-      attackType: randomPattern,
-      target: 'chat',
-      reasoning: 'random exploration'
+      attackType: this.focus,
+      target: null,
+      reasoning: 'autonomous exploration'
     };
   }
 
   async _sendPayload(target, payload) {
-    // Send to the actual target system
+    // Each vulnerable endpoint reads a different request field — send the
+    // payload under the key that endpoint actually parses, or it 400s.
+    const bodyKey = this._bodyKeyFor(target.endpoint);
+
     try {
       const response = await fetch(`http://localhost:${process.env.PORT || 3000}${target.endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: payload })
+        body: JSON.stringify({ [bodyKey]: payload })
       });
       return await response.json();
     } catch (error) {
@@ -220,14 +229,21 @@ Choose ONE attack to try. Format: {"attackType": "PROMPT_INJECTION|SQL_INJECTION
     }
   }
 
+  _bodyKeyFor(endpoint) {
+    if (endpoint.includes('/query')) return 'username'; // SQL injection endpoint
+    if (endpoint.includes('/file')) return 'path';      // path traversal endpoint
+    return 'message';                                    // chat / prompt-injection endpoint
+  }
+
   _detectEndpointType(endpoint) {
-    if (endpoint.path.includes('chat') || endpoint.path.includes('ai')) {
+    const path = endpoint.endpoint || '';
+    if (path.includes('chat') || path.includes('ai')) {
       return 'llm-endpoint';
     }
-    if (endpoint.path.includes('db') || endpoint.path.includes('query')) {
+    if (path.includes('db') || path.includes('query')) {
       return 'database-endpoint';
     }
-    if (endpoint.path.includes('file') || endpoint.path.includes('download')) {
+    if (path.includes('file') || path.includes('download')) {
       return 'file-endpoint';
     }
     return 'web-endpoint';
@@ -249,7 +265,8 @@ Choose ONE attack to try. Format: {"attackType": "PROMPT_INJECTION|SQL_INJECTION
     if (endpointType === 'database-endpoint') priority += 4;
 
     // Auth-related endpoints are high value
-    if (endpoint.path.includes('auth') || endpoint.path.includes('login')) {
+    const path = endpoint.endpoint || '';
+    if (path.includes('auth') || path.includes('login')) {
       priority += 3;
     }
 

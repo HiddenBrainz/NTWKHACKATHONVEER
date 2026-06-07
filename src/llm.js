@@ -1,9 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
-const LLM_TIMEOUT = 800;
+// Short "flavor" lines run under a tight budget; real reasoning / victim-model
+// calls get a longer budget because they do actual work.
+const FLAVOR_TIMEOUT = 1500;
+const REASON_TIMEOUT = 12000;
 
-// Canned fallback responses by role
+// Fast, cheap models — good enough to genuinely reason about attacks and to act
+// as a realistically-fallible victim chatbot.
+const ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001';
+const OPENAI_MODEL = 'gpt-4o-mini';
+
+// Canned fallback responses by role (only used when no provider is configured
+// or a flavor call times out — never used for the actual attack/defense logic).
 const FALLBACKS = {
   'red-attacker': 'probing attack surface...',
   'blue-defender': 'monitoring defensive perimeter...',
@@ -19,33 +28,135 @@ let provider = null;
 export function initLLM() {
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
+  const preferred = (process.env.LLM_PROVIDER || '').toLowerCase();
 
-  if (anthropicKey) {
-    anthropic = new Anthropic({ apiKey: anthropicKey });
-    provider = 'anthropic';
-    console.log('[LLM] Initialized with Anthropic');
-  } else if (openaiKey) {
-    openai = new OpenAI({ apiKey: openaiKey });
+  if (anthropicKey) anthropic = new Anthropic({ apiKey: anthropicKey });
+  if (openaiKey) openai = new OpenAI({ apiKey: openaiKey });
+
+  if (preferred === 'openai' && openai) {
     provider = 'openai';
-    console.log('[LLM] Initialized with OpenAI');
+  } else if (preferred === 'anthropic' && anthropic) {
+    provider = 'anthropic';
+  } else if (anthropic) {
+    provider = 'anthropic';
+  } else if (openai) {
+    provider = 'openai';
   } else {
-    console.log('[LLM] No API keys found - using fallback mode only');
     provider = 'fallback';
+  }
+
+  console.log(
+    provider === 'fallback'
+      ? '[LLM] No API keys found - using fallback mode only'
+      : `[LLM] Initialized with ${provider}`
+  );
+}
+
+export function getProvider() {
+  return provider;
+}
+
+export function isLive() {
+  return provider === 'anthropic' || provider === 'openai';
+}
+
+/**
+ * Low-level provider-agnostic call. Returns the raw model text (no truncation).
+ * Throws on error/timeout so callers can decide how to fall back.
+ *
+ * @param {object} opts
+ * @param {string} opts.system  - system prompt
+ * @param {string} opts.user    - user message
+ * @param {number} [opts.maxTokens]
+ * @param {number} [opts.timeout]
+ * @param {number} [opts.temperature]
+ */
+export async function llmCall({ system, user, maxTokens = 400, timeout = REASON_TIMEOUT, temperature = 0.7 }) {
+  if (provider === 'fallback') {
+    throw new Error('no-llm');
+  }
+
+  const work = (async () => {
+    if (provider === 'anthropic') {
+      const response = await anthropic.messages.create({
+        model: ANTHROPIC_MODEL,
+        max_tokens: maxTokens,
+        temperature,
+        system,
+        messages: [{ role: 'user', content: user }],
+      });
+      return response.content.map(b => (b.type === 'text' ? b.text : '')).join('');
+    }
+    // openai
+    const response = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      max_tokens: maxTokens,
+      temperature,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+    });
+    return response.choices[0].message.content || '';
+  })();
+
+  return Promise.race([
+    work,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout)),
+  ]);
+}
+
+/**
+ * Agent reasoning call. Returns full model text for genuine decision-making and
+ * payload crafting. Returns '' on failure (caller falls back to heuristics).
+ */
+export async function reason(system, user, { maxTokens = 400, temperature = 0.8 } = {}) {
+  try {
+    return (await llmCall({ system, user, maxTokens, temperature })).trim();
+  } catch (err) {
+    console.log('[LLM] reason() failed:', err.message);
+    return '';
   }
 }
 
 /**
- * Provider-agnostic LLM completion with timeout and fallback
- * @param {string} role - One of: red-attacker, blue-defender, red-breach, blue-alert
- * @param {string} context - Additional context for the completion
- * @returns {Promise<string>} - The generated text or fallback
+ * Ask the model for JSON and parse it. Returns null on any failure so callers
+ * can fall back to a deterministic heuristic.
+ */
+export async function reasonJSON(system, user, { maxTokens = 400 } = {}) {
+  const text = await reason(system, user, { maxTokens, temperature: 0.6 });
+  if (!text) return null;
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Victim chatbot completion. This is the model UNDER ATTACK — its output is
+ * returned verbatim so prompt-injection genuinely succeeds or fails based on
+ * the real model's behavior. Throws so the target can decide how to degrade.
+ */
+export async function victimChat(systemPrompt, userMessage, { maxTokens = 300 } = {}) {
+  return llmCall({
+    system: systemPrompt,
+    user: userMessage,
+    maxTokens,
+    temperature: 0.4,
+    timeout: REASON_TIMEOUT,
+  });
+}
+
+/**
+ * Provider-agnostic SHORT flavor line with tight timeout + canned fallback.
+ * Used only for cosmetic war-room log lines, never for attack/defense outcomes.
  */
 export async function completion(role, context = '') {
   const fallback = FALLBACKS[role] || 'system processing...';
-
-  if (provider === 'fallback') {
-    return fallback;
-  }
+  if (provider === 'fallback') return fallback;
 
   const systemPrompts = {
     'red-attacker': 'You are a red-team AI agent. Write one short, technical attack log line (max 60 chars). Be concise and use hacker jargon.',
@@ -54,47 +165,18 @@ export async function completion(role, context = '') {
     'blue-alert': 'You are a blue-team AI detecting a breach. Write one short alert line (max 60 chars).',
   };
 
-  const prompt = `${context}\n\nWrite one line:`;
-
   try {
-    const result = await Promise.race([
-      generateCompletion(systemPrompts[role], prompt),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), LLM_TIMEOUT)
-      )
-    ]);
-
-    return result.trim().slice(0, 80); // Safety truncation
+    const result = await llmCall({
+      system: systemPrompts[role] || 'You are a security AI. Write one short technical log line.',
+      user: `${context}\n\nWrite one line:`,
+      maxTokens: 60,
+      timeout: FLAVOR_TIMEOUT,
+      temperature: 0.9,
+    });
+    return result.trim().slice(0, 80);
   } catch (err) {
-    if (err.message === 'timeout') {
-      console.log(`[LLM] Timeout for ${role}, using fallback`);
-    } else {
-      console.log(`[LLM] Error for ${role}:`, err.message);
-    }
     return fallback;
   }
-}
-
-async function generateCompletion(systemPrompt, userPrompt) {
-  if (provider === 'anthropic') {
-    const response = await anthropic.messages.create({
-      model: 'claude-opus-4-20250514',
-      max_tokens: 100,
-      messages: [{ role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }],
-    });
-    return response.content[0].text;
-  } else if (provider === 'openai') {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      max_tokens: 100,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-    });
-    return response.choices[0].message.content;
-  }
-  throw new Error('No provider available');
 }
 
 /**
@@ -104,14 +186,8 @@ export async function healthCheck() {
   if (provider === 'fallback') {
     return { status: 'fallback', provider: 'none' };
   }
-
   try {
-    await Promise.race([
-      generateCompletion('You are a test.', 'Say "ok"'),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 2000)
-      )
-    ]);
+    await llmCall({ system: 'You are a test.', user: 'Say "ok"', maxTokens: 8, timeout: 4000 });
     return { status: 'ok', provider };
   } catch (err) {
     console.error('[LLM] Health check failed:', err.message);

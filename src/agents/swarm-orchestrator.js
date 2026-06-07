@@ -7,6 +7,24 @@ import { RedAgent } from './red-agent.js';
 import { BlueAgent } from './blue-agent.js';
 import { completion } from '../llm.js';
 
+// Each attack vector has a natural target endpoint
+const ENDPOINT_BY_ATTACK = {
+  PROMPT_INJECTION: 'chat',
+  XSS: 'chat',
+  SQL_INJECTION: 'query',
+  PATH_TRAVERSAL: 'file'
+};
+
+// Map a target endpoint to the node it represents on the attack-surface map
+const NODE_BY_ENDPOINT = {
+  '/target/chat': 'System prompt',
+  '/target/query': 'User DB',
+  '/target/file': 'Secrets'
+};
+
+// Distinct attack focus per red agent so the swarm probes every surface
+const RED_FOCUSES = ['PROMPT_INJECTION', 'SQL_INJECTION', 'PATH_TRAVERSAL', 'XSS'];
+
 export class SwarmOrchestrator {
   constructor(targetEndpoints, eventBroadcaster) {
     this.targetEndpoints = targetEndpoints;
@@ -45,9 +63,10 @@ export class SwarmOrchestrator {
 
     console.log(`[Swarm] Initializing ${redCount} red agents, ${blueCount} blue agents`);
 
-    // Create red team agents
+    // Create red team agents, each assigned a distinct attack focus
     for (let i = 0; i < redCount; i++) {
-      const agent = new RedAgent(`red-${i + 1}`, completion, this.targetEndpoints);
+      const focus = RED_FOCUSES[i % RED_FOCUSES.length];
+      const agent = new RedAgent(`red-${i + 1}`, completion, this.targetEndpoints, focus);
       this.redTeam.push(agent);
 
       this.broadcastEvent({
@@ -182,6 +201,13 @@ export class SwarmOrchestrator {
         findings: findings.slice(0, 3) // Top 3 findings
       });
 
+      // Light up the node this agent is about to probe on the surface map
+      const probeTarget = this._resolveTarget(agent.focus);
+      const probeNode = NODE_BY_ENDPOINT[probeTarget.endpoint];
+      if (probeNode) {
+        this.broadcastEvent({ type: 'node_probed', node: probeNode });
+      }
+
       // Log agent's thoughts
       this.broadcastEvent({
         type: 'agent_reasoning',
@@ -191,6 +217,20 @@ export class SwarmOrchestrator {
 
       await this._sleep(400);
     }
+  }
+
+  /**
+   * Resolve which endpoint an attack should target.
+   * Prefers the endpoint that naturally matches the attack vector, then the
+   * agent's planned target by name, then the first available endpoint.
+   */
+  _resolveTarget(attackType, preferredName) {
+    const name = ENDPOINT_BY_ATTACK[attackType];
+    return (
+      this.targetEndpoints.find(e => e.name === name) ||
+      this.targetEndpoints.find(e => e.name === preferredName) ||
+      this.targetEndpoints[0]
+    );
   }
 
   /**
@@ -205,16 +245,17 @@ export class SwarmOrchestrator {
       try {
         // Agent decides what to attack
         const plan = await agent.planAttack(this.targetEndpoints);
+        const attackType = plan.attackType || agent.focus || 'PROMPT_INJECTION';
 
         this.broadcastEvent({
           type: 'agent_reasoning',
           agent: agent.id,
-          text: `Planning: ${plan.reasoning || 'Trying ' + plan.attackType}`
+          text: `Planning: ${plan.reasoning || 'Trying ' + attackType}`
         });
 
-        // Execute the attack
-        const target = this.targetEndpoints.find(e => e.name === plan.target) || this.targetEndpoints[0];
-        const result = await agent.executeAttack(target, plan.attackType || 'PROMPT_INJECTION');
+        // Route the attack to the endpoint that matches the chosen vector
+        const target = this._resolveTarget(attackType, plan.target);
+        const result = await agent.executeAttack(target, attackType);
 
         this.stats.attacksAttempted++;
 
@@ -233,7 +274,8 @@ export class SwarmOrchestrator {
           this.broadcastEvent({
             type: 'vulnerability_found',
             agent: agent.id,
-            vulnerability: result.vulnerability
+            vulnerability: result.vulnerability,
+            node: NODE_BY_ENDPOINT[result.vulnerability.endpoint] || 'System prompt'
           });
 
           this.broadcastEvent({
@@ -254,7 +296,7 @@ export class SwarmOrchestrator {
         } else {
           this.broadcastEvent({
             type: 'attack',
-            text: `${agent.id} · ${plan.attackType} attempt blocked`
+            text: `${agent.id} · ${attackType} attempt blocked`
           });
         }
 

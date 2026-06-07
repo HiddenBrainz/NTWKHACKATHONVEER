@@ -142,16 +142,22 @@ Open `http://localhost:3000` in two browser tabs. Trigger breach in one tab. Bot
 
 ```
 live-breach/
-├── server.js              # Express server (SSE, API endpoints)
+├── server.js                     # Express server (SSE, API + vulnerable target endpoints)
 ├── src/
-│   ├── llm.js             # Provider-agnostic LLM with timeout + fallback
-│   ├── orchestrator.js    # Breach sequence logic + event broadcasting
-│   └── target.js          # Vulnerable chatbot endpoint
+│   ├── llm.js                    # Provider-agnostic LLM with timeout + fallback
+│   ├── swarm-controller.js       # SSE client registry + event broadcaster (active orchestrator)
+│   ├── target.js                 # Vulnerable chatbot endpoint
+│   └── agents/
+│       ├── base-agent.js         # Memory, learning, strategy adaptation, LLM reasoning
+│       ├── red-agent.js          # Autonomous attacker (prompt injection / SQLi / path traversal / XSS)
+│       ├── blue-agent.js         # Autonomous defender (anomaly scoring, validation, WAF, rate limit)
+│       └── swarm-orchestrator.js # Multi-agent battle loop (recon → attack → monitor → respond)
 ├── public/
-│   ├── index.html         # War-room dashboard UI
-│   ├── styles.css         # Dark/light mode styling
-│   └── app.js             # SSE consumer, map animation, breach handlers
-├── .env                   # Configuration (API keys, feature flags)
+│   ├── index.html                # War-room dashboard UI
+│   ├── styles-enhanced.css       # Styling
+│   ├── app.js                    # SSE consumer, map animation, breach handlers
+│   └── decart-module.js          # Optional webcam transform (feature-flagged)
+├── .env                          # Configuration (API keys, feature flags)
 └── package.json
 ```
 
@@ -159,18 +165,18 @@ live-breach/
 
 1. User clicks "Trigger Breach"
 2. Browser sends `POST /api/trigger-breach`
-3. Server calls `orchestrator.triggerBreach()`
-4. Orchestrator emits events via SSE: `attack_started`, `node_probed`, `attack`, `defense`, `node_breached`, `breach_confirmed`
-5. All connected browsers receive events in real-time
-6. Frontend updates map, log, meter, camera
-7. Breach sequence completes deterministically in ~2.5 seconds
+3. Server calls `swarmController.startSwarm({ redCount: 3, blueCount: 3 })`
+4. The swarm spawns red + blue agents and runs an autonomous battle loop (up to 10 rounds): red-team reconnaissance → attacks → blue-team monitoring → defense response
+5. Each step is emitted via SSE: `agent_spawned`, `swarm_started`, `round_started`, `agent_reasoning`, `node_probed`, `vulnerability_found`, `attack`, `defense`, `defense_deployed`, `exploit_chain`, `swarm_stopped`, `breach_confirmed`
+6. All connected browsers receive events in real-time and update the map, log, meter, and camera
+7. Each red agent is assigned a distinct attack vector, so the swarm discovers all three target vulnerabilities; the battle ends once enough vulnerabilities are found
 
 ### LLM Fallback Strategy
 
-- Every LLM call has an **800ms timeout**
-- If the call times out or fails, canned text is used
-- The breach sequence **never stalls**, even with no internet
-- Flavor text is optional—core functionality is deterministic
+- Every agent decision/flavor LLM call has a **1500ms timeout**
+- If the call times out or fails, the agent falls back to its assigned attack vector and canned text
+- The swarm **never stalls**, even with no internet — LLM output is flavor; the battle logic is deterministic
+- With an API key, agent reasoning uses Claude Haiku (fast/cheap) or GPT-4o-mini
 
 ---
 
@@ -240,29 +246,45 @@ The main app (`public/app.js`) conditionally imports and uses the module based o
 
 ### GET `/api/stream`
 
-Server-Sent Events stream. Returns events:
+Server-Sent Events stream. Emits swarm events:
 
-- `idle`, `attack_started`, `node_probed`, `attack`, `defense`, `node_breached`, `breach_confirmed`, `reset`
+- `idle`, `swarm_started`, `agent_spawned`, `round_started`, `agent_action`, `agent_reasoning`, `node_probed`, `vulnerability_found`, `exploit_chain`, `attack`, `defense`, `defense_deployed`, `swarm_stopped`, `breach_confirmed`, `reset`
 
 ### POST `/api/trigger-breach`
 
-Starts the breach sequence. Returns `{ success: true, message: '...' }`
+Starts the autonomous agent swarm battle. Returns `{ success: true, message: 'Agent swarm initiated' }` (or `{ success: false, message: 'Swarm already running' }`).
 
 ### POST `/api/reset`
 
-Resets to idle state. Returns `{ success: true, message: '...' }`
+Resets to idle state and stops any running swarm. Returns `{ success: true, message: '...' }`
+
+### GET `/api/swarm/report`
+
+Returns a detailed report of the most recent swarm (stats, discoveries, defenses, exploit chains, per-agent reports), or `{ message: 'No active swarm' }`.
 
 ### POST `/api/judge-attack`
 
 Body: `{ "payload": "your attack string" }`
 
-Blue team LLM evaluates your attack. Returns `{ success: true, verdict: '...' }`
+Blue team LLM evaluates your attack and broadcasts the verdict to all clients. Returns `{ success: true, verdict: '...' }`
 
 ### POST `/target/chat`
 
 Body: `{ "message": "your message" }`
 
-Vulnerable chatbot endpoint. May leak `FLAG-7731` if prompted correctly.
+Vulnerable chatbot endpoint (prompt injection). May leak `FLAG-7731` if prompted correctly.
+
+### POST `/target/query`
+
+Body: `{ "username": "your input" }`
+
+Vulnerable database endpoint (SQL injection). Leaks the user table + secrets when the input contains `'`, `or`, or `union`.
+
+### POST `/target/file`
+
+Body: `{ "path": "your path" }`
+
+Vulnerable file endpoint (path traversal). Leaks file contents when the path contains `../`, `..\`, or `%2e%2e`.
 
 ### GET `/api/config`
 

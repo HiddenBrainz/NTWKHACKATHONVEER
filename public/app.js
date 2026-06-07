@@ -119,8 +119,9 @@ function handleEvent(event) {
 
     case 'vulnerability_found':
       appendFeed(`🚨 ${event.agent} discovered ${event.vulnerability.type} [${event.vulnerability.severity}]`, 'red');
-      if (event.vulnerability.endpoint.includes('prompt')) {
-        breachNode('System prompt');
+      // Breach the map node the orchestrator mapped this discovery to
+      if (event.node) {
+        breachNode(event.node);
       }
       break;
 
@@ -159,10 +160,12 @@ function handleEvent(event) {
       if (event.stats) {
         appendFeed(`📊 Final: ${event.stats.vulnerabilitiesFound} vulns, ${event.stats.defensesDeployed} defenses`, 'neutral');
       }
+      triggerBtn.disabled = false;
       break;
 
     case 'swarm_stopped':
       appendFeed(`⏹️  Battle ended - ${event.stats.currentRound} rounds completed`, 'neutral');
+      triggerBtn.disabled = false;
       break;
 
     case 'reset':
@@ -406,14 +409,21 @@ async function resetUI() {
 function setupControls() {
   triggerBtn.addEventListener('click', async () => {
     triggerBtn.disabled = true;
-    const res = await fetch('/api/trigger-breach', { method: 'POST' });
-    const data = await res.json();
-    console.log('[Trigger]', data);
+    try {
+      const res = await fetch('/api/trigger-breach', { method: 'POST' });
+      const data = await res.json();
+      console.log('[Trigger]', data);
 
-    // Re-enable after sequence completes (~3s)
-    setTimeout(() => {
+      // If the swarm couldn't start (already running), re-enable now.
+      // Otherwise the button is re-enabled by the swarm_stopped / breach_confirmed
+      // events when the battle actually finishes.
+      if (!data.success) {
+        triggerBtn.disabled = false;
+      }
+    } catch (err) {
+      console.error('[Trigger] failed:', err);
       triggerBtn.disabled = false;
-    }, 4000);
+    }
   });
 
   resetBtn.addEventListener('click', async () => {

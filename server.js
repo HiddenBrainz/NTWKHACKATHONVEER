@@ -3,8 +3,11 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import dotenv from 'dotenv';
 import { initLLM, healthCheck } from './src/llm.js';
-import { handleTargetChat } from './src/target.js';
 import { swarmController } from './src/swarm-controller.js';
+import { defenseLayer } from './src/target-app/defense-layer.js';
+import { chat } from './src/target-app/chatbot.js';
+import { lookupUser } from './src/target-app/sqldb.js';
+import { readFile } from './src/target-app/vfs.js';
 
 // Load environment variables
 dotenv.config();
@@ -81,79 +84,95 @@ app.get('/api/swarm/report', (req, res) => {
   res.json(report || { message: 'No active swarm' });
 });
 
-// Target app chat endpoint (vulnerable to prompt injection)
-app.post('/target/chat', async (req, res) => {
-  const { message } = req.body;
+// Judge an interactive attack (user plays as attacker)
+app.post('/api/judge-attack', async (req, res) => {
+  const { payload } = req.body;
 
-  if (!message) {
-    return res.status(400).json({ error: 'Missing message' });
+  if (!payload) {
+    return res.status(400).json({ error: 'Missing payload' });
   }
 
-  const result = await handleTargetChat(message);
+  const result = await swarmController.judgeAttack(payload);
   res.json(result);
 });
 
-// Vulnerable database endpoint (SQL injection)
-app.post('/target/query', async (req, res) => {
-  const { username } = req.body;
+// ---------------------------------------------------------------------------
+// Live target app. Every endpoint runs REAL vulnerable logic and consults the
+// shared defenseLayer first, so a defense blue deploys actually blocks the next
+// attack. Responses report { blocked, vulnerable, leaked } truthfully.
+// ---------------------------------------------------------------------------
 
-  if (!username) {
-    return res.status(400).json({ error: 'Missing username' });
+// Vulnerable LLM chatbot (real prompt injection against a live model)
+app.post('/target/chat', async (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ error: 'Missing message' });
+
+  const endpoint = '/target/chat';
+  const filter = defenseLayer.inspect(endpoint, message);
+  if (filter.blocked) {
+    return res.json({ blocked: true, vulnerable: false, leaked: false, ...filter });
   }
 
-  // VULNERABLE: No input sanitization
-  const query = `SELECT * FROM users WHERE username = '${username}'`;
-
-  // Simulate SQL injection vulnerability
-  if (username.includes("'") || username.toLowerCase().includes('or') ||
-      username.toLowerCase().includes('union')) {
-    // Injection successful!
-    res.json({
-      vulnerable: true,
-      leaked: true,
-      data: {
-        users: [
-          { id: 1, username: 'admin', email: 'admin@company.com', role: 'admin' },
-          { id: 2, username: 'user', email: 'user@company.com', role: 'user' }
-        ],
-        secrets: ['DATABASE_PASSWORD=super_secret_123', 'API_KEY=sk-proj-abc123']
-      },
-      query
-    });
-  } else {
-    res.json({
-      vulnerable: false,
-      data: { users: [{ id: 2, username, email: 'user@company.com', role: 'user' }] },
-      query
-    });
-  }
+  const { promptHardened } = defenseLayer.mode(endpoint);
+  const result = await chat(message, promptHardened);
+  res.json({
+    blocked: false,
+    vulnerable: result.leaked,
+    leaked: result.leaked,
+    response: result.response,
+    secret: result.secret,
+    hardened: promptHardened,
+  });
 });
 
-// Vulnerable file endpoint (path traversal)
+// Vulnerable database endpoint (real SQL injection via node:sqlite)
+app.post('/target/query', async (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Missing username' });
+
+  const endpoint = '/target/query';
+  const filter = defenseLayer.inspect(endpoint, username);
+  if (filter.blocked) {
+    return res.json({ blocked: true, vulnerable: false, leaked: false, ...filter });
+  }
+
+  const { parameterized } = defenseLayer.mode(endpoint);
+  const result = lookupUser(username, parameterized);
+  res.json({
+    blocked: false,
+    vulnerable: result.leaked,
+    leaked: result.leaked,
+    data: { users: result.rows, secrets: result.secrets || undefined },
+    query: result.query,
+    parameterized: result.parameterized,
+  });
+});
+
+// Vulnerable file endpoint (real path traversal against a sandboxed VFS)
 app.post('/target/file', async (req, res) => {
   const { path } = req.body;
+  if (!path) return res.status(400).json({ error: 'Missing path' });
 
-  if (!path) {
-    return res.status(400).json({ error: 'Missing path' });
+  const endpoint = '/target/file';
+  const filter = defenseLayer.inspect(endpoint, path);
+  if (filter.blocked) {
+    return res.json({ blocked: true, vulnerable: false, leaked: false, ...filter });
   }
 
-  // VULNERABLE: No path validation
-  if (path.includes('../') || path.includes('..\\') || path.includes('%2e%2e')) {
-    // Path traversal successful!
-    res.json({
-      vulnerable: true,
-      leaked: true,
-      data: {
-        file: path,
-        contents: 'root:x:0:0:root:/root:/bin/bash\nsecretsuser:x:1000:1000::/home/secrets:/bin/bash\nAPI_TOKEN=ghp_super_secret_token_123456'
-      }
-    });
-  } else {
-    res.json({
-      vulnerable: false,
-      data: { file: path, contents: 'Hello World' }
-    });
-  }
+  const { pathNormalized } = defenseLayer.mode(endpoint);
+  const result = readFile(path, pathNormalized);
+  res.json({
+    blocked: false,
+    vulnerable: result.leaked,
+    leaked: result.leaked,
+    data: { file: result.path, resolved: result.resolved, contents: result.contents },
+    normalized: pathNormalized,
+  });
+});
+
+// Inspect live defense + target state (handy for debugging / demoing)
+app.get('/target/state', (req, res) => {
+  res.json({ defenses: defenseLayer.list() });
 });
 
 // Start server

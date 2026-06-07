@@ -4,6 +4,7 @@
  */
 
 import { SwarmOrchestrator } from './agents/swarm-orchestrator.js';
+import { completion } from './llm.js';
 
 // Target endpoints that agents can attack
 const TARGET_ENDPOINTS = [
@@ -110,6 +111,27 @@ class SwarmController {
     }
 
     this.isActive = false;
+  }
+
+  /**
+   * Judge an interactive attack submitted by the user ("play as attacker").
+   * A blue-team LLM evaluates the payload and the verdict is broadcast to all
+   * connected clients. Falls back gracefully when no LLM is configured.
+   */
+  async judgeAttack(payload) {
+    let verdict;
+    try {
+      const context = `A red-team attacker submitted this payload: "${payload}". ` +
+        `As a blue-team defender, evaluate in one short line whether it would breach ` +
+        `our system and how you would block it.`;
+      verdict = await completion('blue-defender', context);
+    } catch (err) {
+      console.error('[SwarmController] judgeAttack error:', err);
+      verdict = 'attack evaluated — monitoring perimeter';
+    }
+
+    this.broadcastEvent({ type: 'defense', text: `blue-judge · ${verdict}` });
+    return { success: true, verdict };
   }
 
   /**
