@@ -39,13 +39,15 @@ const R = '\x1b[31m', G = '\x1b[32m', Y = '\x1b[33m', B = '\x1b[36m',
 // ════════════════════════════════════════════════════════════════
 // Service nodes. `vector` marks the three that are genuinely exploitable so the
 // map can color the attack edge by what's being thrown at it.
+// Coordinates fill a 600×440 canvas; the SVG scales this up to fill the big
+// center stage, so larger radii here read as much bigger nodes on screen.
 const NODE_DEF = {
-  target:  { x: 300, y: 210, r: 34, label: 'target',     ip: '10.0.0.15' },
-  auth:    { x: 150, y:  78, r: 20, label: 'auth',       ip: '10.0.0.11' },
-  api:     { x: 450, y:  78, r: 20, label: 'api-gw',     ip: '10.0.0.12' },
-  secrets: { x:  92, y: 300, r: 22, label: 'secrets',    ip: '10.0.0.13', vector: 'PATH_TRAVERSAL' },
-  db:      { x: 508, y: 300, r: 22, label: 'user-db',    ip: '10.0.0.14', vector: 'SQL_INJECTION' },
-  prompt:  { x: 300, y: 372, r: 24, label: 'sys-prompt', ip: '10.0.0.16', vector: 'PROMPT_INJECTION' }
+  target:  { x: 300, y: 215, r: 42, label: 'target',     ip: '10.0.0.15' },
+  auth:    { x: 156, y:  74, r: 26, label: 'auth',       ip: '10.0.0.11' },
+  api:     { x: 444, y:  74, r: 26, label: 'api-gw',     ip: '10.0.0.12' },
+  secrets: { x:  96, y: 296, r: 28, label: 'secrets',    ip: '10.0.0.13', vector: 'PATH_TRAVERSAL' },
+  db:      { x: 504, y: 296, r: 28, label: 'user-db',    ip: '10.0.0.14', vector: 'SQL_INJECTION' },
+  prompt:  { x: 300, y: 380, r: 30, label: 'sys-prompt', ip: '10.0.0.16', vector: 'PROMPT_INJECTION' }
 };
 const EDGE_DEF = ['auth', 'api', 'secrets', 'db', 'prompt'].map(id => ({ id, from: 'target', to: id }));
 const NAME_TO_KEY = {
@@ -120,13 +122,14 @@ function buildLegend(svg, ns) {
   ];
   const g = document.createElementNS(ns, 'g');
   g.setAttribute('class', 'map-legend');
+  // Top-left horizontal row, clear of the nodes and the bottom sys-prompt node.
   items.forEach((it, i) => {
-    const x = 16 + i * 78, y = 408;
+    const x = 18 + i * 74, y = 20;
     const dot = document.createElementNS(ns, 'circle');
-    dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('r', 3.5);
+    dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('r', 4);
     dot.setAttribute('fill', it.c);
     const tx = document.createElementNS(ns, 'text');
-    tx.setAttribute('x', x + 8); tx.setAttribute('y', y + 3.5);
+    tx.setAttribute('x', x + 9); tx.setAttribute('y', y + 3.5);
     tx.setAttribute('class', 'legend-txt'); tx.textContent = it.t;
     g.appendChild(dot); g.appendChild(tx);
   });

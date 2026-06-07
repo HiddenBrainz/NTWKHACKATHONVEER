@@ -62,18 +62,11 @@
     <!-- ── Body grid ── -->
     <div class="grid">
 
-      <!-- Left rail -->
+      <!-- Left rail: agents + threat meter (thin) -->
       <aside class="rail">
         <section class="card" style="flex:1 1 auto;">
           <div class="card-h"><span class="card-t">agents</span><span class="card-m" id="agentCount">0 active</span></div>
           <div class="agents" id="agentsGrid"><div class="empty">awaiting deployment</div></div>
-        </section>
-
-        <section class="card map-card">
-          <div class="card-h"><span class="card-t">network</span><span class="card-m" id="netMeta">5 nodes · idle</span></div>
-          <svg id="attackMap" viewBox="0 0 600 420" xmlns="http://www.w3.org/2000/svg">
-            <g id="edges"></g><g id="traffic"></g><g id="nodes"></g>
-          </svg>
         </section>
 
         <section class="card meter-card">
@@ -81,6 +74,19 @@
           <div class="meter"><div class="meter-fill" id="meterFill"></div></div>
         </section>
       </aside>
+
+      <!-- Center: the network map — the star of the show -->
+      <section class="card map-card" id="mapCard">
+        <div class="card-h">
+          <span class="card-t">network</span>
+          <span class="card-m" id="netMeta">5 nodes · idle</span>
+        </div>
+        <div class="map-stage">
+          <svg id="attackMap" viewBox="0 0 600 440" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+            <g id="edges"></g><g id="traffic"></g><g id="nodes"></g>
+          </svg>
+        </div>
+      </section>
 
       <!-- Terminal hero -->
       <main class="term-wrap">

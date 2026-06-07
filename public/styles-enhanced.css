@@ -131,10 +131,13 @@ body::after {
 .status.breached .txt { color: var(--red); }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.45} }
 
-/* ─── Grid: rail + terminal hero ─────────────────────────────── */
+/* ─── Grid: agents rail · BIG network map · terminal ─────────── */
 .grid {
   flex: 1; min-height: 0;
-  display: grid; grid-template-columns: 300px 1fr; gap: 10px;
+  display: grid;
+  /* thin agents rail | large map (the star) | terminal */
+  grid-template-columns: 230px minmax(440px, 1.5fr) minmax(360px, 1fr);
+  gap: 10px;
 }
 .rail { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
 
@@ -176,9 +179,23 @@ body::after {
 .agent.red  .bar > i { background: var(--red); }
 .agent.blue .bar > i { background: var(--blu); }
 
-/* network map */
-.map-card { flex-shrink: 0; }
-#attackMap { width: 100%; height: auto; display: block; padding: 6px; }
+/* network map — now the centerpiece, fills its whole column */
+.map-card { min-height: 0; }
+.map-stage {
+  flex: 1; min-height: 0; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  padding: 10px;
+  /* subtle radar backdrop so the big empty area reads as "the network" */
+  background:
+    radial-gradient(circle at 50% 48%, rgba(37,255,154,0.05), transparent 60%),
+    repeating-radial-gradient(circle at 50% 48%, rgba(37,255,154,0.04) 0 1px, transparent 1px 46px);
+}
+#attackMap { width: 100%; height: 100%; display: block; }
+/* bigger, bolder nodes + labels now that there's room */
+.node-label { font-size: 13px; } .node-label-small { font-size: 11px; }
+.node-ip { font-size: 9px; }
+.legend-txt { font-size: 9.5px; }
+.agent-mlabel { font-size: 9px; }
 .edge { stroke: rgba(37,255,154,0.18); stroke-width: 1.2; transition: all 0.4s; }
 .edge.breached { stroke: var(--red); stroke-width: 2; filter: drop-shadow(0 0 4px var(--red)); animation: pulse 0.8s infinite; }
 .node { fill: #0c1014; stroke: rgba(37,255,154,0.5); stroke-width: 1.5; transition: all 0.3s; }
@@ -279,10 +296,18 @@ body::after {
 .app.shake { animation: shake 0.5s; }
 
 /* responsive */
+/* medium: drop the terminal under a wide map so the network stays the star */
+@media (max-width: 1240px) and (min-width: 961px) {
+  .grid { grid-template-columns: 210px 1fr; grid-template-rows: 1.4fr 1fr; }
+  .map-card { grid-column: 2; grid-row: 1; }
+  .rail { grid-column: 1; grid-row: 1 / 3; }
+  .term-wrap { grid-column: 2; grid-row: 2; }
+}
 @media (max-width: 960px) {
   .grid { grid-template-columns: 1fr; }
   .rail { flex-direction: row; flex-wrap: wrap; }
   .rail .card { flex: 1; min-width: 240px; }
+  .map-stage { min-height: 380px; }
   body { overflow: auto; }
   .app { height: auto; min-height: 100vh; }
 }
