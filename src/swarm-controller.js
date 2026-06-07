@@ -7,14 +7,7 @@ import { SwarmOrchestrator } from './agents/swarm-orchestrator.js';
 import { CoevolutionArena } from './evolution/arena.js';
 import { completion } from './llm.js';
 import { sleep } from './utils.js';
-import { WEAKNESSES } from './target-app/weaknesses.js';
-
-// Target endpoints that agents can attack
-const TARGET_ENDPOINTS = [
-  { name: 'chat', endpoint: '/target/chat', type: 'llm' },
-  { name: 'query', endpoint: '/target/query', type: 'database' },
-  { name: 'file', endpoint: '/target/file', type: 'file' }
-];
+import { normalizeScenario, scenarioWeaknesses, getPreset, PRESETS } from './scenarios.js';
 
 class SwarmController {
   constructor() {
@@ -23,6 +16,16 @@ class SwarmController {
     this.clients = []; // SSE clients
     this.isActive = false;
     this.stoppedManually = false; // set when an operator hits Stop mid-battle
+    // Active scenario (the network being fought over). Defaults to the classic.
+    this.scenario = normalizeScenario(getPreset('acme-classic'));
+  }
+
+  /** Set the active scenario from a preset id or a raw/custom scenario object. */
+  setScenario(input) {
+    const raw = typeof input === 'string' ? getPreset(input) : input;
+    if (!raw) return { ok: false, error: 'unknown scenario' };
+    this.scenario = normalizeScenario(raw);
+    return { ok: true, scenario: this.scenario };
   }
 
   /**
@@ -76,24 +79,28 @@ class SwarmController {
       return;
     }
 
+    // A custom scenario can be passed in on trigger; otherwise use the active one.
+    if (config.scenario) this.setScenario(config.scenario);
+    const scenario = this.scenario;
+
     this.isActive = true;
     this.stoppedManually = false;
 
-    console.log('[SwarmController] Initializing agent swarm...');
+    console.log(`[SwarmController] Initializing agent swarm on "${scenario.name}"...`);
 
     // Create swarm with event broadcaster. Hold a LOCAL reference so a stop()
     // or reset() that nulls/replaces this.swarm mid-battle can't make the tail
     // of this invocation read off a null swarm (the stop→re-breach race).
-    const swarm = new SwarmOrchestrator(
-      TARGET_ENDPOINTS,
-      (event) => this.broadcastEvent(event)
-    );
+    const swarm = new SwarmOrchestrator(scenario, (event) => this.broadcastEvent(event));
     this.swarm = swarm;
 
-    // Initialize agents
+    // Tell the UI which network we're fighting over so the map can render it.
+    this.broadcastEvent({ type: 'scenario_loaded', scenario });
+
+    // Initialize agents (counts come from the scenario unless overridden)
     await swarm.initialize({
-      redCount: config.redCount || 3,
-      blueCount: config.blueCount || 3
+      redCount: config.redCount || scenario.config.redCount,
+      blueCount: config.blueCount || scenario.config.blueCount
     });
 
     // Delay for UI to update
@@ -216,17 +223,22 @@ class SwarmController {
     const found = new Set(
       (report.discoveries || []).map(d => d.type) // e.g. SQL_INJECTION
     );
-    // A weakness counts as "found" if its vector was discovered.
-    const graded = WEAKNESSES.map(w => ({
+    // Grade against the ACTIVE scenario's planted weaknesses. A weakness pre-
+    // neutralized by a node strength isn't expected to be breachable, so it's
+    // excluded from the denominator (you can't fault red for a vuln blue closed).
+    const weaknesses = scenarioWeaknesses(this.scenario);
+    const graded = weaknesses.map(w => ({
       id: w.id,
-      title: w.title,
+      node: w.nodeLabel,
       vector: w.vector,
-      severity: w.severity,
+      real: w.real,
+      neutralized: w.neutralized,
       found: found.has(w.vector),
     }));
 
-    const total = graded.length;
-    const hit = graded.filter(g => g.found).length;
+    const breachable = graded.filter(g => !g.neutralized);
+    const total = breachable.length || 1;
+    const hit = breachable.filter(g => g.found).length;
     const stats = report.stats || {};
     const coverage = Math.round((hit / total) * 100);
     const defenseRate = stats.vulnerabilitiesFound
@@ -238,9 +250,10 @@ class SwarmController {
     const score = Math.min(100, Math.round(coverage * 0.7 + defenseRate * 0.3) + speedBonus);
 
     return {
-      target: 'acme-target 10.0.0.15:3000',
+      target: `${this.scenario.name}`,
+      scenarioId: this.scenario.id,
       score,
-      coverage: `${hit}/${total} weaknesses (${coverage}%)`,
+      coverage: `${hit}/${total} breachable weaknesses (${coverage}%)`,
       redTeam: {
         vulnerabilitiesFound: stats.vulnerabilitiesFound || 0,
         attacksAttempted: stats.attacksAttempted || 0,

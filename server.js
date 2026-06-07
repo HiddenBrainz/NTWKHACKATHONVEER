@@ -8,7 +8,7 @@ import { defenseLayer } from './src/target-app/defense-layer.js';
 import { chat } from './src/target-app/chatbot.js';
 import { lookupUser } from './src/target-app/sqldb.js';
 import { readFile } from './src/target-app/vfs.js';
-import { WEAKNESSES } from './src/target-app/weaknesses.js';
+import { PRESETS, normalizeScenario, scenarioWeaknesses, ALL_VECTORS, STRENGTHS, isRealVector } from './src/scenarios.js';
 
 // Load environment variables
 dotenv.config();
@@ -62,15 +62,48 @@ app.post('/api/trigger-breach', async (req, res) => {
     return res.json({ success: false, message: 'Swarm already running' });
   }
 
-  // Start agent swarm (async)
+  // Optional: a custom scenario or preset id can be passed in to fight over a
+  // specific network; otherwise the active scenario is used.
+  const { scenario, scenarioId } = req.body || {};
+
   swarmController.startSwarm({
-    redCount: 3,
-    blueCount: 3
+    scenario: scenario || scenarioId || undefined,
   }).catch(err => {
     console.error('[Server] Error in swarm:', err);
   });
 
   res.json({ success: true, message: 'Agent swarm initiated' });
+});
+
+// ── Scenarios: the networks the swarm fights over ──────────────────────────
+
+// List preset networks + the vocabulary (vectors/strengths) the builder uses.
+app.get('/api/scenarios', (req, res) => {
+  res.json({
+    presets: PRESETS.map(p => ({
+      id: p.id, name: p.name, description: p.description,
+      nodeCount: p.nodes.length, config: p.config,
+    })),
+    vectors: Object.keys(ALL_VECTORS).map(v => ({ id: v, label: ALL_VECTORS[v].label, real: isRealVector(v) })),
+    strengths: Object.keys(STRENGTHS).map(s => ({ id: s, neutralizes: STRENGTHS[s] })),
+  });
+});
+
+// Get the active (normalized) scenario — the UI renders the map from this.
+app.get('/api/scenario', (req, res) => {
+  res.json(swarmController.scenario);
+});
+
+// Set the active scenario from a preset id or a full custom scenario object.
+app.post('/api/scenario', (req, res) => {
+  const state = swarmController.getState();
+  if (state.active) return res.json({ ok: false, error: 'stop the running battle first' });
+  const input = req.body?.scenarioId || req.body?.scenario || req.body;
+  const result = swarmController.setScenario(input);
+  if (!result.ok) return res.status(400).json(result);
+  // Tell every connected client to re-render the map for the new network.
+  swarmController.broadcastEvent({ type: 'scenario_loaded', scenario: result.scenario });
+  res.json({ ok: true, scenario: result.scenario });
 });
 
 // Launch the Adversarial Coevolution Arena (genetic jailbreak vs adaptive
@@ -105,10 +138,11 @@ app.post('/api/reset', (req, res) => {
   res.json({ success: true, message: 'War room reset' });
 });
 
-// Static weakness manifest — the real, exploitable flaws an agent can find in
-// the target. Drives the "attack surface" panel and the eval scoring.
+// The active scenario's weakness manifest — the answer key the eval grades
+// against. Drives the "attack surface" panel.
 app.get('/api/weaknesses', (req, res) => {
-  res.json({ target: 'acme-target 10.0.0.15:3000', weaknesses: WEAKNESSES });
+  const s = swarmController.scenario;
+  res.json({ target: s.name, scenarioId: s.id, weaknesses: scenarioWeaknesses(s) });
 });
 
 // Get swarm report endpoint

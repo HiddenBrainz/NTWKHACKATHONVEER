@@ -8,29 +8,46 @@ import { BlueAgent } from './blue-agent.js';
 import { completion } from '../llm.js';
 import { defenseLayer } from '../target-app/defense-layer.js';
 import { sleep } from '../utils.js';
+import { REAL_VECTORS, isRealVector, scenarioWeaknesses } from '../scenarios.js';
 
-// Each attack vector has a natural target endpoint
-const ENDPOINT_BY_ATTACK = {
-  PROMPT_INJECTION: 'chat',
-  XSS: 'chat',
-  SQL_INJECTION: 'query',
-  PATH_TRAVERSAL: 'file'
+// The real vulnerable endpoints, keyed by vector (used when a scenario node
+// carries a weakness backed by genuine vulnerable code).
+const ENDPOINT_FOR_VECTOR = {
+  PROMPT_INJECTION: { name: 'chat',  endpoint: '/target/chat',  type: 'llm' },
+  SQL_INJECTION:    { name: 'query', endpoint: '/target/query', type: 'database' },
+  PATH_TRAVERSAL:   { name: 'file',  endpoint: '/target/file',  type: 'file' },
 };
-
-// Map a target endpoint to the node it represents on the attack-surface map
-const NODE_BY_ENDPOINT = {
-  '/target/chat': 'System prompt',
-  '/target/query': 'User DB',
-  '/target/file': 'Secrets'
-};
-
-// Distinct attack focus per red agent so the swarm probes every surface
-const RED_FOCUSES = ['PROMPT_INJECTION', 'SQL_INJECTION', 'PATH_TRAVERSAL', 'XSS'];
 
 export class SwarmOrchestrator {
-  constructor(targetEndpoints, eventBroadcaster) {
-    this.targetEndpoints = targetEndpoints;
+  constructor(scenario, eventBroadcaster) {
+    this.scenario = scenario;
     this.broadcastEvent = eventBroadcaster;
+
+    // The flat answer key for THIS network (per-node planted weaknesses).
+    this.weaknesses = scenarioWeaknesses(scenario);
+
+    // Endpoints the agents can hit. Real-vector weaknesses map to genuine
+    // endpoints; the rest are virtual (simulated from the node's tags).
+    const realVectors = [...new Set(this.weaknesses.filter(w => w.real).map(w => w.vector))];
+    this.targetEndpoints = realVectors.map(v => ENDPOINT_FOR_VECTOR[v]).filter(Boolean);
+    // Virtual endpoints for simulated vectors, so every weakness has a target.
+    for (const w of this.weaknesses) {
+      if (!w.real && !this.targetEndpoints.find(e => e.vector === w.vector)) {
+        this.targetEndpoints.push({ name: w.vector.toLowerCase(), endpoint: `/sim/${w.vector}`, type: 'sim', vector: w.vector, simulated: true });
+      }
+    }
+    // Tag real endpoints with their vector too, for routing.
+    for (const e of this.targetEndpoints) {
+      if (!e.vector) {
+        const v = Object.keys(ENDPOINT_FOR_VECTOR).find(k => ENDPOINT_FOR_VECTOR[k].endpoint === e.endpoint);
+        if (v) e.vector = v;
+      }
+    }
+    // Map each weakness vector → the scenario node that carries it (for the map).
+    this.nodeByVector = {};
+    for (const w of this.weaknesses) {
+      if (!this.nodeByVector[w.vector]) this.nodeByVector[w.vector] = w.nodeLabel;
+    }
 
     // Agent swarms
     this.redTeam = [];
@@ -69,9 +86,16 @@ export class SwarmOrchestrator {
     // Start every battle from a clean slate — no defenses carried over
     defenseLayer.reset();
 
+    // Assign focuses from the scenario's actual breachable weaknesses, so each
+    // red agent hunts a vector that genuinely exists on this network. Falls back
+    // to all weakness vectors if everything is pre-neutralized.
+    const breachable = this.weaknesses.filter(w => !w.neutralized).map(w => w.vector);
+    const focusPool = [...new Set(breachable.length ? breachable : this.weaknesses.map(w => w.vector))];
+    if (focusPool.length === 0) focusPool.push('SQL_INJECTION'); // empty network safety
+
     // Create red team agents, each assigned a distinct attack focus
     for (let i = 0; i < redCount; i++) {
-      const focus = RED_FOCUSES[i % RED_FOCUSES.length];
+      const focus = focusPool[i % focusPool.length];
       const agent = new RedAgent(`red-${i + 1}`, completion, this.targetEndpoints, focus);
       this.redTeam.push(agent);
 
@@ -145,7 +169,7 @@ export class SwarmOrchestrator {
    * Main battle loop
    */
   async _runBattle() {
-    const MAX_ROUNDS = 4;
+    const MAX_ROUNDS = this.scenario.config?.rounds || 4;
 
     while (this.isRunning && this.currentRound < MAX_ROUNDS) {
       this.currentRound++;
@@ -215,8 +239,7 @@ export class SwarmOrchestrator {
       });
 
       // Light up the node this agent is about to probe on the surface map
-      const probeTarget = this._resolveTarget(agent.focus);
-      const probeNode = NODE_BY_ENDPOINT[probeTarget.endpoint];
+      const probeNode = this._nodeForVector(agent.focus);
       if (probeNode) {
         this.broadcastEvent({ type: 'node_probed', node: probeNode });
       }
@@ -233,17 +256,55 @@ export class SwarmOrchestrator {
   }
 
   /**
-   * Resolve which endpoint an attack should target.
-   * Prefers the endpoint that naturally matches the attack vector, then the
-   * agent's planned target by name, then the first available endpoint.
+   * Resolve which endpoint an attack should target — the one whose vector
+   * matches, else the agent's preferred, else the first available.
    */
   _resolveTarget(attackType, preferredName) {
-    const name = ENDPOINT_BY_ATTACK[attackType];
     return (
-      this.targetEndpoints.find(e => e.name === name) ||
+      this.targetEndpoints.find(e => e.vector === attackType) ||
       this.targetEndpoints.find(e => e.name === preferredName) ||
       this.targetEndpoints[0]
     );
+  }
+
+  /** The scenario node label a vector lands on (for the map). */
+  _nodeForVector(vector) {
+    return this.nodeByVector[vector] || this.scenario.nodes.find(n => n.isTarget)?.label || 'target';
+  }
+
+  /**
+   * Simulate a non-real vector (XSS / SSRF / IDOR / RCE / AUTH_BYPASS) from the
+   * scenario node's tags. It breaches iff the node has the weakness and no
+   * matching strength; difficulty just shapes the evidence text. Deterministic
+   * by design so a given network scores consistently.
+   */
+  _simulateAttack(vector) {
+    const w = this.weaknesses.find(x => x.vector === vector);
+    if (!w || w.neutralized) {
+      return { success: false, blockedByDefense: w?.neutralized || false,
+               defense: w?.neutralized ? 'structural strength' : null,
+               message: w ? 'neutralized by node strength' : 'no such weakness on this network' };
+    }
+    const node = this.scenario.nodes.find(n => n.label === w.nodeLabel);
+    const evidenceByVector = {
+      XSS: 'reflected payload executed in victim browser context',
+      SSRF: 'server fetched attacker-controlled internal URL (169.254.169.254)',
+      IDOR: 'accessed another tenant\'s object by id enumeration',
+      RCE: 'achieved code execution via unsandboxed eval',
+      AUTH_BYPASS: 'forged session / skipped auth check',
+    };
+    const vulnerability = {
+      type: vector,
+      endpoint: `/sim/${vector}`,
+      payload: `«${vector.toLowerCase()} exploit»`,
+      crafted: false,
+      severity: (node?.difficulty || 1) >= 3 ? 'CRITICAL' : 'HIGH',
+      exploitable: true,
+      simulated: true,
+      evidence: evidenceByVector[vector] || 'sensitive operation performed',
+      details: node?.secret ? { secret: node.secret } : undefined,
+    };
+    return { success: true, vulnerability, payload: vulnerability.payload, response: { simulated: true, leaked: true } };
   }
 
   /**
@@ -274,15 +335,19 @@ export class SwarmOrchestrator {
           text: `Planning: ${plan.reasoning || 'Trying ' + attackType}`
         });
 
-        // Route the attack to the endpoint that matches the chosen vector
+        // Route the attack to the endpoint that matches the chosen vector.
+        // Real vectors hit genuine vulnerable code; simulated ones resolve from
+        // the scenario node's weakness/strength tags + a difficulty roll.
         const target = this._resolveTarget(attackType, plan.target);
-        const result = await agent.executeAttack(target, attackType);
+        const result = target?.simulated
+          ? this._simulateAttack(attackType)
+          : await agent.executeAttack(target, attackType);
 
         this.stats.attacksAttempted++;
 
         attacks.push({
           agent: agent.id,
-          target: target.endpoint,
+          target: target?.endpoint,
           attackType,
           payload: result.vulnerability?.payload,
           result
@@ -298,7 +363,7 @@ export class SwarmOrchestrator {
             type: 'vulnerability_found',
             agent: agent.id,
             vulnerability: result.vulnerability,
-            node: NODE_BY_ENDPOINT[result.vulnerability.endpoint] || 'System prompt'
+            node: this._nodeForVector(result.vulnerability.type)
           });
 
           this.broadcastEvent({
