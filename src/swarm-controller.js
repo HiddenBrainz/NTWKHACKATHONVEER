@@ -21,6 +21,7 @@ class SwarmController {
     this.arena = null; // CoevolutionArena (genetic jailbreak vs adaptive firewall)
     this.clients = []; // SSE clients
     this.isActive = false;
+    this.stoppedManually = false; // set when an operator hits Stop mid-battle
   }
 
   /**
@@ -75,6 +76,7 @@ class SwarmController {
     }
 
     this.isActive = true;
+    this.stoppedManually = false;
 
     console.log('[SwarmController] Initializing agent swarm...');
 
@@ -102,10 +104,13 @@ class SwarmController {
     // Start the battle
     await this.swarm.start();
 
-    // When done, broadcast final stats
+    // When done, broadcast final stats. The orchestrator already fires
+    // breach_confirmed on the FIRST critical hit (so the finale never waits out
+    // a full battle); only fire a fallback here if it somehow never announced
+    // and we weren't stopped by hand.
     const stats = this.swarm.getStats();
 
-    if (stats.vulnerabilitiesFound > 0) {
+    if (!this.stoppedManually && !this.swarm.breachAnnounced && stats.vulnerabilitiesFound > 0) {
       this.broadcastEvent({
         type: 'breach_confirmed',
         stats,
@@ -166,6 +171,7 @@ class SwarmController {
    * Stop the swarm
    */
   stop() {
+    this.stoppedManually = true;
     if (this.swarm) {
       this.swarm.stop();
     }

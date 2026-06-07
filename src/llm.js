@@ -4,7 +4,11 @@ import OpenAI from 'openai';
 // Short "flavor" lines run under a tight budget; real reasoning / victim-model
 // calls get a longer budget because they do actual work.
 const FLAVOR_TIMEOUT = 1500;
-const REASON_TIMEOUT = 12000;
+// Reasoning budget. Agents always have a reliable seed-payload fallback, so a
+// tighter budget just means "don't stall the demo waiting on a slow API call."
+// DEMO_FAST trims it hard so a live pitch never hangs on LLM latency; the real
+// attacks (seed payloads) still land and breach.
+const REASON_TIMEOUT = process.env.DEMO_FAST === 'true' ? 3500 : 12000;
 
 // Fast, cheap models — good enough to genuinely reason about attacks and to act
 // as a realistically-fallible victim chatbot.

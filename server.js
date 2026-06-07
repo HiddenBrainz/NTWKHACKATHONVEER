@@ -8,6 +8,7 @@ import { defenseLayer } from './src/target-app/defense-layer.js';
 import { chat } from './src/target-app/chatbot.js';
 import { lookupUser } from './src/target-app/sqldb.js';
 import { readFile } from './src/target-app/vfs.js';
+import { WEAKNESSES } from './src/target-app/weaknesses.js';
 
 // Load environment variables
 dotenv.config();
@@ -87,10 +88,27 @@ app.post('/api/evolve', async (req, res) => {
   res.json({ success: true, message: 'Coevolution arena initiated' });
 });
 
+// Stop endpoint — halt the running swarm WITHOUT wiping the war-room UI.
+// (reset both stops and clears; stop just freezes the current battle in place.)
+app.post('/api/stop', (req, res) => {
+  const state = swarmController.getState();
+  if (!state.active) {
+    return res.json({ success: false, message: 'No battle running' });
+  }
+  swarmController.stop();
+  res.json({ success: true, message: 'Swarm halted' });
+});
+
 // Reset endpoint
 app.post('/api/reset', (req, res) => {
   swarmController.reset();
   res.json({ success: true, message: 'War room reset' });
+});
+
+// Static weakness manifest — the real, exploitable flaws an agent can find in
+// the target. Drives the "attack surface" panel and the eval scoring.
+app.get('/api/weaknesses', (req, res) => {
+  res.json({ target: 'acme-target 10.0.0.15:3000', weaknesses: WEAKNESSES });
 });
 
 // Get swarm report endpoint

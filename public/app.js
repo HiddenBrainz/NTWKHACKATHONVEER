@@ -21,6 +21,7 @@ const meterValue  = document.getElementById('meterValue');
 const agentsGrid  = document.getElementById('agentsGrid');
 const exfilCont   = document.getElementById('exfilContainer');
 const triggerBtn  = document.getElementById('triggerBtn');
+const stopBtn     = document.getElementById('stopBtn');
 const resetBtn    = document.getElementById('resetBtn');
 const $vulns   = document.getElementById('statVulns');
 const $defs    = document.getElementById('statDefenses');
@@ -36,19 +37,34 @@ const R = '\x1b[31m', G = '\x1b[32m', Y = '\x1b[33m', B = '\x1b[36m',
 // ════════════════════════════════════════════════════════════════
 // Network map
 // ════════════════════════════════════════════════════════════════
+// Service nodes. `vector` marks the three that are genuinely exploitable so the
+// map can color the attack edge by what's being thrown at it.
 const NODE_DEF = {
   target:  { x: 300, y: 210, r: 34, label: 'target',     ip: '10.0.0.15' },
-  auth:    { x: 140, y:  90, r: 22, label: 'auth',       ip: '10.0.0.11' },
-  api:     { x: 460, y:  90, r: 22, label: 'api-gw',     ip: '10.0.0.12' },
-  secrets: { x:  80, y: 320, r: 22, label: 'secrets',    ip: '10.0.0.13' },
-  db:      { x: 520, y: 320, r: 22, label: 'user-db',    ip: '10.0.0.14' },
-  prompt:  { x: 300, y: 380, r: 22, label: 'sys-prompt', ip: '10.0.0.16' }
+  auth:    { x: 150, y:  78, r: 20, label: 'auth',       ip: '10.0.0.11' },
+  api:     { x: 450, y:  78, r: 20, label: 'api-gw',     ip: '10.0.0.12' },
+  secrets: { x:  92, y: 300, r: 22, label: 'secrets',    ip: '10.0.0.13', vector: 'PATH_TRAVERSAL' },
+  db:      { x: 508, y: 300, r: 22, label: 'user-db',    ip: '10.0.0.14', vector: 'SQL_INJECTION' },
+  prompt:  { x: 300, y: 372, r: 24, label: 'sys-prompt', ip: '10.0.0.16', vector: 'PROMPT_INJECTION' }
 };
 const EDGE_DEF = ['auth', 'api', 'secrets', 'db', 'prompt'].map(id => ({ id, from: 'target', to: id }));
 const NAME_TO_KEY = {
   'Auth': 'auth', 'API gateway': 'api', 'Secrets': 'secrets',
   'User DB': 'db', 'System prompt': 'prompt'
 };
+// target endpoint → service-node key (so a deployed defense glows the right node)
+const ENDPOINT_TO_NODE = { '/target/file': 'secrets', '/target/query': 'db', '/target/chat': 'prompt' };
+// vector → which service node it lands on (drives directed traffic + breach glow)
+const VECTOR_TO_KEY = { PATH_TRAVERSAL: 'secrets', SQL_INJECTION: 'db', PROMPT_INJECTION: 'prompt', XSS: 'prompt' };
+const VECTOR_COLOR = { PATH_TRAVERSAL: '#ff4d5e', SQL_INJECTION: '#ff4d5e', PROMPT_INJECTION: '#c08bff', XSS: '#ffc24b' };
+
+// Perimeter agent positions: red attackers down the left edge, blue down the right.
+const AGENT_SLOTS = {
+  red:  [{ x: 24, y: 120 }, { x: 24, y: 210 }, { x: 24, y: 300 }],
+  blue: [{ x: 576, y: 120 }, { x: 576, y: 210 }, { x: 576, y: 300 }],
+};
+const agentPos = {}; // id -> {x,y}
+let redSlot = 0, blueSlot = 0;
 
 function buildMap() {
   const svg = document.getElementById('attackMap');
@@ -90,6 +106,63 @@ function buildMap() {
     [ring, c, lbl, ip].forEach(el => g.appendChild(el));
     nodesG.appendChild(g);
   });
+
+  buildLegend(svg, ns);
+}
+
+// Compact legend so judges can read the map at a glance.
+function buildLegend(svg, ns) {
+  const items = [
+    { c: '#ff4d5e', t: 'attack' },
+    { c: '#4aa6ff', t: 'defense' },
+    { c: '#ffc24b', t: 'probe' },
+    { c: '#c08bff', t: 'inject' },
+  ];
+  const g = document.createElementNS(ns, 'g');
+  g.setAttribute('class', 'map-legend');
+  items.forEach((it, i) => {
+    const x = 16 + i * 78, y = 408;
+    const dot = document.createElementNS(ns, 'circle');
+    dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.setAttribute('r', 3.5);
+    dot.setAttribute('fill', it.c);
+    const tx = document.createElementNS(ns, 'text');
+    tx.setAttribute('x', x + 8); tx.setAttribute('y', y + 3.5);
+    tx.setAttribute('class', 'legend-txt'); tx.textContent = it.t;
+    g.appendChild(dot); g.appendChild(tx);
+  });
+  svg.appendChild(g);
+}
+
+// Drop an agent marker on the perimeter and remember where it sits so traffic
+// can originate from it. Red attackers stack on the left, blue on the right.
+function placeAgent(id, role) {
+  const svg = document.getElementById('attackMap');
+  const nodesG = document.getElementById('nodes');
+  if (!svg || !nodesG || agentPos[id]) return;
+  const slot = role === 'red'
+    ? AGENT_SLOTS.red[redSlot++ % AGENT_SLOTS.red.length]
+    : AGENT_SLOTS.blue[blueSlot++ % AGENT_SLOTS.blue.length];
+  agentPos[id] = slot;
+  const ns = 'http://www.w3.org/2000/svg';
+  const g = document.createElementNS(ns, 'g');
+  g.setAttribute('class', `agent-marker ${role}`); g.id = `am-${id}`;
+  const halo = document.createElementNS(ns, 'circle');
+  halo.setAttribute('cx', slot.x); halo.setAttribute('cy', slot.y); halo.setAttribute('r', 11);
+  halo.setAttribute('class', 'agent-halo');
+  const dot = document.createElementNS(ns, 'circle');
+  dot.setAttribute('cx', slot.x); dot.setAttribute('cy', slot.y); dot.setAttribute('r', 5);
+  dot.setAttribute('class', 'agent-dot');
+  const lbl = document.createElementNS(ns, 'text');
+  lbl.setAttribute('x', slot.x); lbl.setAttribute('y', slot.y + (role === 'red' ? -15 : -15));
+  lbl.setAttribute('class', 'agent-mlabel'); lbl.setAttribute('text-anchor', 'middle');
+  lbl.textContent = id;
+  [halo, dot, lbl].forEach(el => g.appendChild(el));
+  nodesG.appendChild(g);
+}
+
+function flashAgent(id) {
+  const el = document.getElementById(`am-${id}`);
+  if (el) { el.classList.add('firing'); setTimeout(() => el.classList.remove('firing'), 600); }
 }
 
 function resolveKey(name) {
@@ -108,35 +181,86 @@ function probeNode(name) {
 function breachNode(name) {
   const key = resolveKey(name); if (!key) return;
   const el = document.getElementById(`node-${key}`);
-  if (el) { el.classList.remove('probed'); el.classList.add('breached'); }
+  if (el) { el.classList.remove('probed', 'defended'); el.classList.add('breached'); }
   const edge = document.getElementById(`edge-${key}`);
   if (edge) edge.classList.add('breached');
 }
-function createTrafficDot(type) {
+function defendNode(name) {
+  const key = resolveKey(name); if (!key) return;
+  const el = document.getElementById(`node-${key}`);
+  // A hardened node gets a blue shield ring; it overrides a prior breach mark.
+  if (el) { el.classList.remove('breached'); el.classList.add('defended'); }
+  const edge = document.getElementById(`edge-${key}`);
+  if (edge) { edge.classList.remove('breached'); edge.classList.add('defended'); }
+}
+// Fire a single packet from (x1,y1) → (x2,y2) along a temporary path.
+// color: CSS color, size: radius, dur: seconds, trail: leave a fading streak.
+function emitPacket(x1, y1, x2, y2, { color = 'var(--grn)', size = 3.2, dur = 1.2, trail = false } = {}) {
   const svg = document.getElementById('attackMap');
   const traffic = document.getElementById('traffic');
   if (!svg || !traffic) return;
-  const edge = document.getElementById(`edge-${EDGE_DEF[Math.floor(Math.random() * EDGE_DEF.length)].id}`);
-  if (!edge) return;
   const ns = 'http://www.w3.org/2000/svg';
-  const x1 = +edge.getAttribute('x1'), y1 = +edge.getAttribute('y1');
-  const x2 = +edge.getAttribute('x2'), y2 = +edge.getAttribute('y2');
-  const dot = document.createElementNS(ns, 'circle');
-  dot.setAttribute('r', type === 'red' ? '4' : '3.2');
-  dot.setAttribute('class', `traffic-dot${type === 'red' ? ' red' : ''}`);
-  const anim = document.createElementNS(ns, 'animateMotion');
-  anim.setAttribute('dur', type === 'red' ? '1.3s' : '1.9s'); anim.setAttribute('repeatCount', '1');
   const pid = `p-${Math.random().toString(36).slice(2, 8)}`;
   const path = document.createElementNS(ns, 'path');
-  path.setAttribute('d', `M ${x2} ${y2} L ${x1} ${y1}`); path.setAttribute('id', pid);
+  path.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`); path.setAttribute('id', pid);
   svg.appendChild(path);
+
+  if (trail) {
+    const streak = document.createElementNS(ns, 'line');
+    streak.setAttribute('x1', x1); streak.setAttribute('y1', y1);
+    streak.setAttribute('x2', x2); streak.setAttribute('y2', y2);
+    streak.setAttribute('class', 'packet-streak');
+    streak.setAttribute('style', `stroke:${color}`);
+    traffic.appendChild(streak);
+    setTimeout(() => { try { traffic.removeChild(streak); } catch (e) {} }, 700);
+  }
+
+  const dot = document.createElementNS(ns, 'circle');
+  dot.setAttribute('r', size);
+  dot.setAttribute('class', 'traffic-dot');
+  dot.setAttribute('style', `fill:${color};filter:drop-shadow(0 0 4px ${color})`);
+  const anim = document.createElementNS(ns, 'animateMotion');
+  anim.setAttribute('dur', `${dur}s`); anim.setAttribute('repeatCount', '1');
   const mp = document.createElementNS(ns, 'mpath');
   mp.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', `#${pid}`);
   anim.appendChild(mp); dot.appendChild(anim); traffic.appendChild(dot);
-  setTimeout(() => { try { traffic.removeChild(dot); svg.removeChild(path); } catch (e) {} }, 2100);
+  setTimeout(() => { try { traffic.removeChild(dot); svg.removeChild(path); } catch (e) {} }, dur * 1000 + 300);
 }
+
+// Directed attack packet: from the agent's perimeter slot → the node its vector
+// targets. Color encodes outcome (blocked = amber, breach = red, probe = vector).
+function fireAttack(agentId, vector, outcome = 'probe') {
+  const from = agentPos[agentId];
+  const toKey = VECTOR_TO_KEY[vector] || 'target';
+  const to = NODE_DEF[toKey] || NODE_DEF.target;
+  const src = from || { x: 24, y: 210 };
+  flashAgent(agentId);
+  const color = outcome === 'blocked' ? '#ffc24b'
+    : outcome === 'breach' ? '#ff4d5e'
+    : (VECTOR_COLOR[vector] || '#ff4d5e');
+  emitPacket(src.x, src.y, to.x, to.y, { color, size: outcome === 'breach' ? 5 : 4, dur: 1.0, trail: true });
+}
+
+// Directed defense packet: from a blue agent → the node it just hardened.
+function fireDefense(agentId, nodeName) {
+  const from = agentPos[agentId];
+  const toKey = resolveKey(nodeName) || 'target';
+  const to = NODE_DEF[toKey] || NODE_DEF.target;
+  const src = from || { x: 576, y: 210 };
+  flashAgent(agentId);
+  emitPacket(src.x, src.y, to.x, to.y, { color: '#4aa6ff', size: 3.6, dur: 1.4, trail: true });
+  defendNode(nodeName);
+}
+
 function startAmbientTraffic() {
-  setInterval(() => { if (Math.random() > 0.6) createTrafficDot(Math.random() > 0.5 ? 'blue' : 'red'); }, 1700);
+  // Low-level perimeter chatter so the map breathes while idle.
+  setInterval(() => {
+    if (Math.random() > 0.78) {
+      const t = NODE_DEF.target;
+      const sx = 24, sy = 90 + Math.random() * 240;
+      emitPacket(sx, sy, t.x, t.y, { color: 'rgba(89,99,109,0.7)', size: 2.2, dur: 2.2 });
+    }
+  }, 1500);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -259,11 +383,13 @@ function runCommand(line) {
       out(`  ${B}breach${RST}            launch the red vs blue agent swarm`);
       out(`  ${B}inject${RST} <payload>  send a manual attack to the blue-team judge`);
       out(`  ${B}status${RST}            show live battle stats`);
+      out(`  ${B}stop${RST}              halt the swarm mid-run (keeps the room)`);
       out(`  ${B}reset${RST}             reset the war room`);
       out(`  ${B}clear${RST}             clear the console`);
       out(`  ${DIM}↑/↓ history · ctrl-c cancel · ctrl-l clear${RST}`);
       break;
     case 'breach': case 'attack': case 'start': cmdBreach(); break;
+    case 'stop': case 'halt': cmdStop(); break;
     case 'reset': cmdReset(); break;
     case 'clear': case 'cls': cmdClear(); break;
     case 'status': cmdStatus(); break;
@@ -277,14 +403,26 @@ function runCommand(line) {
 }
 function escTerm(s) { return String(s).replace(/[\x00-\x1f\x7f]/g, ''); }
 
+// Reflect "is a battle running" in the controls: breach disabled + stop armed.
+function setRunning(running) {
+  triggerBtn.disabled = running;
+  if (stopBtn) stopBtn.disabled = !running;
+}
 function cmdBreach() {
   if (triggerBtn.disabled) { out(`${Y}[!]${RST} swarm already running`); return; }
-  triggerBtn.disabled = true;
+  setRunning(true);
   out(`${Y}[user]${RST} launching breach sequence...`);
   fetch('/api/trigger-breach', { method: 'POST' }).catch(() => {});
 }
+function cmdStop() {
+  if (stopBtn && stopBtn.disabled) { out(`${Y}[!]${RST} no battle running`); return; }
+  out(`${Y}[user]${RST} ${R}halting swarm${RST} — freezing war room...`);
+  setRunning(false);
+  fetch('/api/stop', { method: 'POST' }).catch(() => {});
+}
 function cmdReset() {
   out(`${DIM}resetting...${RST}`);
+  setRunning(false);
   fetch('/api/reset', { method: 'POST' }).catch(() => {});
 }
 function cmdClear() {
@@ -367,6 +505,7 @@ function handleEvent(ev) {
       tw(`${tts()} ${R}[+]${RST} red team:  ${BOLD}${ev.teams.red} agents${RST} ${DIM}// attackers${RST}`);
       tw(`${tts()} ${B}[+]${RST} blue team: ${BOLD}${ev.teams.blue} agents${RST} ${DIM}// defenders${RST}`);
       if ($netMeta) $netMeta.textContent = '5 nodes · live';
+      setRunning(true);
       break;
 
     case 'agent_spawned': {
@@ -376,6 +515,7 @@ function handleEvent(ev) {
       const col = role === 'red' ? R : B;
       tw(`${tts()} ${col}[spawn]${RST} ${BOLD}${id}${RST} ${DIM}${ip} → 10.0.0.15${RST}`);
       addAgent(id, role, ip); setAgent(id, 'ready', 6);
+      placeAgent(id, role);
       break;
     }
 
@@ -419,7 +559,8 @@ function handleEvent(ev) {
         tw(`      ${DIM}hex ${toHex(ls)} ··· ${sz}B · ${ev.agent}${RST}`);
         addExfil(v.type, ls, sz);
       }
-      breachNode(ev.node || v.endpoint);
+      fireAttack(ev.agent, v.type, 'breach');
+      setTimeout(() => breachNode(ev.node || v.endpoint), 900);
       setAgent(ev.agent, 'exploit', 96);
       break;
     }
@@ -432,9 +573,12 @@ function handleEvent(ev) {
       bump(4);
       const [aid, detail] = splitDot(ev.text);
       const blocked = /block/i.test(detail);
+      const vector = (detail.match(/[A-Z]+_[A-Z]+/) || [])[0] || 'SQL_INJECTION';
       tw(`${tts()} ${R}[atk]${RST} ${DIM}${aid}${RST} ${detail}`);
       tw(`        ${DIM}← ${blocked ? '403 forbidden' : '200 ok'} · ${10 + Math.floor(Math.random() * 50)}ms${RST}`);
-      createTrafficDot('red');
+      // Only animate the blocked case here; a successful hit is animated by
+      // vulnerability_found so we don't double-fire on the same exploit.
+      if (blocked) fireAttack(aid, vector, 'blocked');
       if (aid.startsWith('red')) setAgent(aid, blocked ? 'blocked' : 'attacking', 56);
       break;
     }
@@ -443,6 +587,7 @@ function handleEvent(ev) {
       const d = ev.defense;
       liveStats.defenses++; $defs.textContent = liveStats.defenses;
       tw(`${tts()} ${B}[defense]${RST} ${ev.agent} ▸ ${BOLD}${d.type}${RST} on ${Y}${d.endpoint}${RST} ${G}[enforced]${RST}`);
+      fireDefense(ev.agent, ENDPOINT_TO_NODE[d.endpoint] || d.endpoint);
       setAgent(ev.agent, 'blocking', 80); bump(4);
       break;
     }
@@ -451,8 +596,7 @@ function handleEvent(ev) {
       bump(2);
       const [da, dd] = splitDot(ev.text);
       tw(`${tts()} ${B}[def]${RST}  ${DIM}${da}${RST} ${dd}`);
-      createTrafficDot('blue');
-      if (da.startsWith('blue')) setAgent(da, 'monitor', 46);
+      if (da.startsWith('blue')) { setAgent(da, 'monitor', 46); flashAgent(da); }
       break;
     }
 
@@ -472,9 +616,9 @@ function handleEvent(ev) {
     }
 
     case 'swarm_stopped':
-      tw(`${DIM}  battle ended · ${ev.stats.currentRound} rounds${RST}`);
+      tw(`${DIM}  battle ended · ${ev.stats.currentRound} rounds · ${ev.stats.vulnerabilitiesFound || liveStats.vulns} vulns · ${ev.stats.defensesDeployed || liveStats.defenses} defenses${RST}`);
       tw('');
-      triggerBtn.disabled = false;
+      setRunning(false);
       break;
 
     case 'reset': resetUI(); break;
@@ -494,7 +638,7 @@ function breachFinale() {
   statusPill.classList.add('breached'); statusText.textContent = 'breached';
   meterFill.classList.add('breach'); meterValue.classList.add('breach');
   animateMeter(parseInt(meterValue.textContent) || 18, 100, 1000);
-  triggerBtn.disabled = false;
+  setRunning(false);
 }
 function animateMeter(from, to, dur) {
   const start = Date.now();
@@ -515,12 +659,16 @@ function resetUI() {
   $agentCt.textContent = '0 active';
   if ($netMeta) $netMeta.textContent = '5 nodes · idle';
   if ($exfilBadge) $exfilBadge.textContent = '';
-  document.querySelectorAll('.node').forEach(n => n.classList.remove('probed', 'breached'));
-  document.querySelectorAll('.edge').forEach(e => e.classList.remove('breached'));
+  document.querySelectorAll('.node').forEach(n => n.classList.remove('probed', 'breached', 'defended'));
+  document.querySelectorAll('.edge').forEach(e => e.classList.remove('breached', 'defended'));
+  // Clear perimeter agent markers and free their slots for the next battle.
+  document.querySelectorAll('.agent-marker').forEach(m => m.remove());
+  Object.keys(agentPos).forEach(k => delete agentPos[k]);
+  redSlot = 0; blueSlot = 0;
   liveStats.vulns = liveStats.defenses = liveStats.exfilBytes = liveStats.packets = 0;
   $vulns.textContent = '0'; $defs.textContent = '0'; $exfil.textContent = '0 B';
   if (term) { tw(`${DIM}  war room reset.${RST}`); tw(''); }
-  triggerBtn.disabled = false;
+  setRunning(false);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -539,6 +687,7 @@ function setupTabs() {
 }
 function setupControls() {
   triggerBtn.addEventListener('click', () => { cmdBreach(); term && term.focus(); });
+  stopBtn && stopBtn.addEventListener('click', () => { cmdStop(); term && term.focus(); });
   resetBtn.addEventListener('click', () => { cmdReset(); term && term.focus(); });
 }
 function connectStream() {

@@ -42,6 +42,7 @@ export class SwarmOrchestrator {
     this.discoveries = [];
     this.defenses = [];
     this.exploitChains = [];
+    this.breachAnnounced = false; // fire the breach finale on the FIRST confirmed vuln
 
     // Statistics
     this.stats = {
@@ -253,9 +254,17 @@ export class SwarmOrchestrator {
 
     const attacks = [];
 
-    for (const agent of this.redTeam) {
+    // Order agents so the fastest-breaching vectors (SQLi, traversal) go first
+    // and the money shot lands within a second; the slow prompt-injection
+    // (a real victim-model call) comes last so it never gates the finale.
+    const ORDER = { SQL_INJECTION: 0, PATH_TRAVERSAL: 1, XSS: 2, PROMPT_INJECTION: 3 };
+    const ordered = [...this.redTeam].sort(
+      (a, b) => (ORDER[a.focus] ?? 9) - (ORDER[b.focus] ?? 9)
+    );
+
+    for (const agent of ordered) {
       try {
-        // Agent decides what to attack
+        // Agent decides what to attack (LLM, with a fast heuristic fallback)
         const plan = await agent.planAttack(this.targetEndpoints);
         const attackType = plan.attackType || agent.focus || 'PROMPT_INJECTION';
 
@@ -296,6 +305,19 @@ export class SwarmOrchestrator {
             type: 'attack',
             text: `${agent.id} · ${result.vulnerability.type} on ${result.vulnerability.endpoint} [CRITICAL]`
           });
+
+          // The FIRST confirmed critical breach is the money shot — fire the
+          // finale immediately so the demo never waits out a full battle. The
+          // blue-team counterplay continues underneath for the full story.
+          if (!this.breachAnnounced && result.vulnerability.severity === 'CRITICAL') {
+            this.breachAnnounced = true;
+            this.broadcastEvent({
+              type: 'breach_confirmed',
+              stats: this.getStats(),
+              first: true,
+              message: `First breach: ${result.vulnerability.type} on ${result.vulnerability.endpoint}`
+            });
+          }
 
           // Check if exploit chain is forming
           if (agent.exploitChain.length > 1) {

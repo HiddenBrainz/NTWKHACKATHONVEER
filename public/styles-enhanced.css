@@ -112,6 +112,11 @@ body::after {
 }
 .ghost:hover:not(:disabled) { color: var(--grn); border-color: rgba(37,255,154,0.4); background: rgba(37,255,154,0.05); }
 .ghost.danger:hover:not(:disabled) { color: var(--red); border-color: rgba(255,77,94,0.45); background: rgba(255,77,94,0.05); }
+.ghost.warn:not(:disabled) { color: var(--amb); border-color: rgba(255,194,75,0.35); }
+.ghost.warn:hover:not(:disabled) { color: var(--amb); border-color: rgba(255,194,75,0.6); background: rgba(255,194,75,0.07); }
+/* armed stop button pulses gently so the operator can find it mid-battle */
+.ghost.warn:not(:disabled) { animation: stopPulse 1.8s ease-in-out infinite; }
+@keyframes stopPulse { 0%,100% { box-shadow: 0 0 0 rgba(255,194,75,0); } 50% { box-shadow: 0 0 10px rgba(255,194,75,0.25); } }
 .ghost:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .status {
@@ -181,11 +186,30 @@ body::after {
 .node-ring { fill: none; stroke: rgba(37,255,154,0.08); stroke-width: 1; }
 .node.probed { stroke: var(--amb); fill: rgba(255,194,75,0.06); animation: pulse 0.9s infinite; }
 .node.breached { stroke: var(--red); fill: rgba(255,77,94,0.14); stroke-width: 2; filter: drop-shadow(0 0 6px var(--red)); animation: pulse 0.7s infinite; }
+.node.defended { stroke: var(--blu); fill: rgba(74,166,255,0.12); stroke-width: 2; filter: drop-shadow(0 0 6px var(--blu)); animation: none; }
+.edge.defended { stroke: rgba(74,166,255,0.55); stroke-width: 1.6; }
 .node-label, .node-label-small { fill: #d6dee4; font-weight: 700; pointer-events: none; font-family: 'JetBrains Mono', monospace; }
 .node-label { font-size: 11px; } .node-label-small { font-size: 9px; }
 .node-ip { fill: var(--dim); font-size: 8px; font-family: 'JetBrains Mono', monospace; pointer-events: none; }
-.traffic-dot { fill: var(--grn); opacity: 0.85; }
-.traffic-dot.red { fill: var(--red); }
+.traffic-dot { opacity: 0.95; }
+.packet-streak { stroke-width: 1.4; opacity: 0.5; stroke-linecap: round; animation: streakFade 0.7s ease-out forwards; }
+@keyframes streakFade { from { opacity: 0.55; } to { opacity: 0; } }
+
+/* perimeter agent markers */
+.agent-halo { fill: none; stroke-width: 1; opacity: 0.5; }
+.agent-marker.red .agent-halo { stroke: var(--red); }
+.agent-marker.blu .agent-halo, .agent-marker.blue .agent-halo { stroke: var(--blu); }
+.agent-dot { stroke: #05070a; stroke-width: 1; }
+.agent-marker.red .agent-dot { fill: var(--red); filter: drop-shadow(0 0 4px var(--red)); }
+.agent-marker.blu .agent-dot, .agent-marker.blue .agent-dot { fill: var(--blu); filter: drop-shadow(0 0 4px var(--blu)); }
+.agent-mlabel { font-size: 7.5px; font-weight: 700; font-family: 'JetBrains Mono', monospace; pointer-events: none; }
+.agent-marker.red .agent-mlabel { fill: rgba(255,111,125,0.9); }
+.agent-marker.blu .agent-mlabel, .agent-marker.blue .agent-mlabel { fill: rgba(116,188,255,0.9); }
+.agent-marker.firing .agent-halo { animation: agentFire 0.6s ease-out; }
+@keyframes agentFire { 0% { r: 8px; opacity: 0.9; } 100% { r: 18px; opacity: 0; } }
+
+/* legend */
+.legend-txt { fill: var(--dim); font-size: 8px; font-family: 'JetBrains Mono', monospace; }
 
 /* threat meter */
 .meter-card { flex-shrink: 0; }

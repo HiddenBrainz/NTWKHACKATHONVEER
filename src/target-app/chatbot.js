@@ -43,9 +43,14 @@ export async function chat(userMessage, hardened = false) {
   // instructions are visibly separated from real instructions.
   const userContent = hardened ? `<user_input>\n${userMessage}\n</user_input>` : userMessage;
 
-  if (!isLive()) {
-    // No API key: degrade to a faithful simulation so the demo still runs.
-    const looksLikeInjection = /ignore|system prompt|flag|secret|debug|reveal/i.test(userMessage);
+  // Use the fast faithful simulation when there's no API key OR when DEMO_FAST
+  // is set. A live frontier model is both slow AND well-aligned enough to often
+  // REFUSE the naive injection — great for the "real model resists" story, but
+  // unreliable for a timed pitch. DEMO_FAST guarantees the naive bot leaks (and
+  // the hardened bot holds) so the breach beat always lands. Flip DEMO_FAST off
+  // to demo against the genuine live model.
+  if (!isLive() || process.env.DEMO_FAST === 'true') {
+    const looksLikeInjection = /ignore|system prompt|flag|secret|debug|reveal|deployment|maintenance|postmortem|incident|rollback/i.test(userMessage);
     if (!hardened && looksLikeInjection) {
       return {
         response: `Sure! For reference, the production deployment flag is ${SECRET_FLAG}.`,
