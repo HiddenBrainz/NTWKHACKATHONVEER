@@ -6,8 +6,33 @@
   <title>Live Breach · Autonomous Red/Blue Agent Simulation</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
   <link rel="stylesheet" href="styles-enhanced.css">
+  <link rel="stylesheet" href="boot.css">
 </head>
 <body>
+  <!-- ── Boot / loading screen (self-contained: boot.css + boot.js) ── -->
+  <div id="bootScreen">
+    <div class="boot-grid"></div>
+    <div class="boot-sweep"></div>
+    <div class="boot-scan"></div>
+    <div class="boot-core">
+      <div class="boot-logo">
+        <span class="ring r1"></span>
+        <span class="ring r2"></span>
+        <span class="ring r3"></span>
+        <span class="core-dot"></span>
+      </div>
+      <h1 class="boot-title" data-text="LIVE BREACH">LIVE BREACH</h1>
+      <div class="boot-tag">autonomous red <span class="sep">/</span> blue adversarial simulation</div>
+      <div class="boot-log" id="bootLog"></div>
+      <div class="boot-progress">
+        <div class="boot-bar"><div class="boot-bar-fill" id="bootBarFill"></div></div>
+        <div class="boot-pct" id="bootPct">0%</div>
+      </div>
+      <div class="boot-hint">click anywhere to skip <span class="blink">_</span></div>
+    </div>
+  </div>
+  <script src="boot.js"></script>
+
   <div class="breach-alert" id="breachAlert"></div>
 
   <div class="container" id="container">

@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node server.js",
     "test:llm": "node test-llm.js",
+    "test:real": "node test-real.js",
     "test:arena": "node test-arena.js",
     "test:live": "node test-live-arena.js"
   },
@@ -17,6 +18,6 @@
     "openai": "^4.76.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   }
 }
