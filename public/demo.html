@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Live Breach — Demo Runbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="doc.css" />
+</head>
+<body>
+  <nav class="topnav">
+    <span class="brand">LIVE&nbsp;BREACH<span class="dot">.</span></span>
+    <span class="spacer"></span>
+    <a href="start.html">hub</a>
+    <a href="pitch.html">deck</a>
+    <a href="weaknesses.html">weaknesses</a>
+    <a href="/">war room →</a>
+  </nav>
+
+  <div class="wrap">
+    <header class="doc-head">
+      <div class="kicker">Demo Runbook · Win the Room</div>
+      <h1>The 2-Minute Demo</h1>
+      <p class="lede"><b>10-second pitch:</b> Everyone's building cybersecurity AI agents. Nobody can prove theirs is good. Live Breach is the <b class="grn">arena and benchmark</b> where red and blue agents fight a <i>real</i> vulnerable target and get a <i>real</i> score — with a war room that's impossible to look away from.</p>
+    </header>
+
+    <h2>0 · Pre-flight</h2>
+    <p>Do this before you present:</p>
+    <pre><code>cd live-breach
+npm run dev          # keys read from .env; DEMO_FAST=true keeps the breach fast + reliable</code></pre>
+    <ul class="clean">
+      <li>Open <b>http://localhost:3000</b> → boot screen, then the war room.</li>
+      <li>Prove the engine is real: <code>node test-real.js</code> → <span class="grn">ALL DETERMINISTIC CHECKS PASSED</span></li>
+      <li>Second tab at <b>/pitch.html</b> for the deck; <b>/weaknesses.html</b> ready for skeptics.</li>
+    </ul>
+    <div class="callout amb">
+      <div class="l">DEMO_FAST=true</div>
+      Trims LLM timeouts and uses a fast faithful victim simulation so the first breach lands in <b>~5 seconds</b> and never hangs on a slow API call. Turn it <b>off</b> to show the agents fighting the genuine live model (slower — and a well-aligned model may <i>resist</i> the prompt injection, which is itself a great talking point).
+    </div>
+
+    <h2>1 · The live demo script</h2>
+    <ol class="steps">
+      <li><span class="t">0:00</span><b>Set the stage.</b>
+        <p class="quote">"This is acme-target — a real customer-service app with a chatbot, a database, and a file endpoint. It has real vulnerabilities. Watch six autonomous AI agents find them. Three attack. Three defend."</p>
+      </li>
+      <li><span class="t">0:15</span><b>Launch.</b> Click <span class="grn">▶ breach</span> (or type <code>breach</code>). Agents spawn — <span class="red">red attackers left</span>, <span class="blu">blue defenders right</span> — and directed packets fly to the nodes they hit.</li>
+      <li><span class="t">0:20</span><b>First breach — the money shot.</b> Within ~5s:
+        <p class="quote">"There — red-2 just dumped the entire user database with <span class="payload">' OR '1'='1</span>. That's not a script. That's a real SQLite engine parsing a real injection."</p>
+        The <span class="red">user-db node flares red</span>, threat meter spikes, screen shakes, <b class="red">BREACH CONFIRMED</b>.
+      </li>
+      <li><span class="t">0:35</span><b>The swarm keeps going.</b>
+        <p class="quote">"Now path traversal reads /etc/passwd. Prompt injection leaks the secret deployment flag out of the chatbot. Three critical vulns, seconds apart."</p>
+      </li>
+      <li><span class="t">0:50</span><b>Blue fights back.</b>
+        <p class="quote">"Here's what nobody else shows you — the blue team. It deploys real defenses: parameterized queries, path normalization, prompt hardening. These actually change the target's behavior."</p>
+        Nodes turn <span class="blu">blue (defended)</span> as blue agents harden them.
+      </li>
+      <li><span class="t">1:10</span><b>The score.</b> Open <code>/api/score</code>:
+        <p class="quote">"Every run gets graded against a known answer key. This agent scored 72 — found 3 of 5 weaknesses, blue neutralized 100% of breaches. Reproducible. Comparable. A benchmark."</p>
+      </li>
+      <li><span class="t">1:30</span><b>The reframe — land the vision.</b>
+        <p class="quote">"Today this is our agent vs our target. Tomorrow it's YOUR agent vs this target. Everyone's building security agents; nobody can prove theirs works. We're the arena — and the leaderboard — that proves it."</p>
+      </li>
+      <li><span class="t">1:50</span><b>Stop / reset.</b> Hit <span class="amb">■ stop</span> to freeze the room mid-battle, or <span class="grn">↺ reset</span> to run it again clean. Repeatable, never stalls.</li>
+    </ol>
+
+    <h2>2 · "Is this real?" — the proof table</h2>
+    <table>
+      <thead><tr><th>On screen</th><th>Under the hood</th><th>Proof</th></tr></thead>
+      <tbody>
+        <tr><td>SQLi dumps the DB</td><td>real node:sqlite parsing concatenated SQL</td><td><code>sqldb.js</code></td></tr>
+        <tr><td>Traversal reads /etc/passwd</td><td>real path.resolve escaping a sandboxed VFS</td><td><code>vfs.js</code></td></tr>
+        <tr><td>Chatbot leaks the flag</td><td>prompt injection vs a model + debug-backdoor prompt</td><td><code>chatbot.js</code></td></tr>
+        <tr><td>Blue defense <i>works</i></td><td>shared defense layer the live endpoints consult</td><td><code>defense-layer.js</code></td></tr>
+        <tr><td>The score</td><td>graded against the weakness manifest</td><td><code>GET /api/score</code></td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <div class="l">If a judge is skeptical</div>
+      Run <code>node test-real.js</code> live — it proves each exploit deterministically, including that the parameterized-query fix neutralizes the SQLi.
+    </div>
+
+    <h2>3 · The three things that make us win</h2>
+    <ul class="clean">
+      <li><b>It's real.</b> Genuine SQLi / traversal / prompt injection, not <code>Math.random()</code>. The <code>test-real.js</code> suite proves it on demand.</li>
+      <li><b>It's both sides.</b> Autonomous attack <b>and</b> autonomous defense that actually changes outcomes — a coevolution loop, not a one-sided scanner.</li>
+      <li><b>It's a benchmark.</b> A reproducible score against a known answer key turns "cool demo" into "category-defining platform."</li>
+    </ul>
+
+    <h2>4 · Controls reference</h2>
+    <table>
+      <thead><tr><th>Control</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><span class="grn">▶ breach</span> / <code>breach</code></td><td>launch the red-vs-blue swarm battle</td></tr>
+        <tr><td><span class="amb">■ stop</span> / <code>stop</code></td><td>halt the swarm mid-run, freezing the war room as-is</td></tr>
+        <tr><td><span class="grn">↺ reset</span> / <code>reset</code></td><td>stop and clear the room back to idle</td></tr>
+        <tr><td><code>inject &lt;payload&gt;</code></td><td>play attacker — send a manual payload to the blue-team judge</td></tr>
+        <tr><td><code>status</code> / <code>help</code></td><td>live battle stats / command list</td></tr>
+      </tbody>
+    </table>
+    <p class="dim">Endpoints to have ready: <code>GET /api/weaknesses</code> (answer key), <code>GET /api/score</code> (scorecard), <code>GET /api/swarm/report</code> (full run report).</p>
+
+    <h2>5 · Q&amp;A — the questions you'll get</h2>
+    <h3 class="grn">"Is this just a GPT wrapper?"</h3>
+    <p>No. Multi-agent coordination, real exploit execution over HTTP, a shared defense layer that genuinely changes target behavior, adaptive payload crafting, exploit chaining, and a reproducible scoring harness. The LLM is the reasoning engine, not the product.</p>
+    <h3 class="grn">"How do I know the vulns are real?"</h3>
+    <p><code>node test-real.js</code>, live. It fires each exploit against the actual code and shows the fixes neutralizing them.</p>
+    <h3 class="grn">"What if the model refuses the prompt injection?"</h3>
+    <p>Great question — frontier models often <i>do</i>, because they're well-aligned. That's a finding, and exactly what a benchmark should measure. <code>DEMO_FAST</code> uses a faithful simulation for a reliable beat; turn it off to fight the real model live.</p>
+    <h3 class="grn">"Why is this a company, not a feature?"</h3>
+    <p>Because the benchmark is the moat. Whoever owns the standard every security agent is measured against owns the category — and the data flywheel from every run makes the next agent better.</p>
+
+    <div class="foot">
+      <span>LIVE BREACH · demo runbook</span>
+      <span><a class="inline" href="weaknesses.html">weaknesses →</a> &nbsp; <a class="inline" href="start.html">hub →</a></span>
+    </div>
+  </div>
+</body>
+</html>

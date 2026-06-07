@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Live Breach — Start Here</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="doc.css" />
+<style>
+  .hero { text-align: center; padding: 70px 0 40px; }
+  .hero h1 { font-size: clamp(40px, 8vw, 92px); }
+  .hero .tag { color: var(--dim); font-size: clamp(13px, 1.6vw, 18px); margin-top: 14px; letter-spacing: 1px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 20px; }
+  .nav-card { display: block; text-decoration: none; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px; transition: all .18s; position: relative; overflow: hidden; }
+  .nav-card:hover { transform: translateY(-3px); border-color: rgba(37,255,154,0.4); }
+  .nav-card .ic { font-size: 26px; margin-bottom: 14px; }
+  .nav-card h3 { color: #fff; font-size: 20px; margin: 0 0 8px; }
+  .nav-card p { color: var(--dim); font-size: 13.5px; margin: 0; line-height: 1.5; }
+  .nav-card .go { position: absolute; top: 24px; right: 26px; color: var(--dim); font-size: 18px; transition: all .18s; }
+  .nav-card:hover .go { color: var(--grn); transform: translateX(3px); }
+  .nav-card.primary { border-left: 3px solid var(--red); }
+  .nav-card.deck    { border-left: 3px solid var(--amb); }
+  .nav-card.weak    { border-left: 3px solid var(--red); }
+  .nav-card.demo    { border-left: 3px solid var(--grn); }
+  @media (max-width: 680px) { .cards { grid-template-columns: 1fr; } }
+  .quicklinks { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .ql { font-size: 11px; color: var(--dim); border: 1px solid var(--line); border-radius: 20px; padding: 5px 12px; text-decoration: none; transition: color .15s; }
+  .ql:hover { color: var(--blu); border-color: rgba(74,166,255,0.4); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div class="kicker" style="justify-content:center">Arena · Benchmark · War Room</div>
+      <h1>LIVE&nbsp;BREACH<span class="red">.</span></h1>
+      <p class="tag">The arena and benchmark for cybersecurity AI agents.<br/>Real target. Real exploits. Real score.</p>
+    </div>
+
+    <div class="cards">
+      <a class="nav-card primary" href="/">
+        <span class="go">→</span>
+        <div class="ic">🚨</div>
+        <h3 class="red">War Room</h3>
+        <p>The live demo. Launch the red-vs-blue swarm and watch autonomous agents breach and defend a real target in real time.</p>
+      </a>
+      <a class="nav-card deck" href="pitch.html">
+        <span class="go">→</span>
+        <div class="ic">📊</div>
+        <h3 class="amb">Pitch Deck</h3>
+        <p>The investor story — problem, the arena/benchmark reframe, market, moat, and the ask. Arrow keys to navigate.</p>
+      </a>
+      <a class="nav-card weak" href="weaknesses.html">
+        <span class="go">→</span>
+        <div class="ic">🎯</div>
+        <h3 class="red">Weaknesses</h3>
+        <p>The answer key. The 5 real, exploitable flaws the agents find — payloads, CVSS, fixes, and proof-of-code references.</p>
+      </a>
+      <a class="nav-card demo" href="demo.html">
+        <span class="go">→</span>
+        <div class="ic">▶</div>
+        <h3 class="grn">Demo Runbook</h3>
+        <p>The 2-minute script that wins the room, the "is this real?" proof table, and the Q&amp;A you'll get from judges.</p>
+      </a>
+    </div>
+
+    <div class="quicklinks">
+      <a class="ql" href="/api/weaknesses">/api/weaknesses</a>
+      <a class="ql" href="/api/score">/api/score</a>
+      <a class="ql" href="/api/swarm/report">/api/swarm/report</a>
+      <a class="ql" href="/api/health/llm">/api/health/llm</a>
+    </div>
+
+    <div class="foot" style="justify-content:center">
+      <span>LIVE BREACH · autonomous red/blue adversarial simulation</span>
+    </div>
+  </div>
+</body>
+</html>
