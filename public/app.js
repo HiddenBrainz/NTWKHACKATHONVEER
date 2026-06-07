@@ -37,53 +37,61 @@ const R = '\x1b[31m', G = '\x1b[32m', Y = '\x1b[33m', B = '\x1b[36m',
 // ════════════════════════════════════════════════════════════════
 // Network map
 // ════════════════════════════════════════════════════════════════
-// Service nodes. `vector` marks the three that are genuinely exploitable so the
-// map can color the attack edge by what's being thrown at it.
-// Coordinates fill a 600×440 canvas; the SVG scales this up to fill the big
-// center stage, so larger radii here read as much bigger nodes on screen.
-const NODE_DEF = {
-  target:  { x: 300, y: 215, r: 42, label: 'target',     ip: '10.0.0.15' },
-  auth:    { x: 156, y:  74, r: 26, label: 'auth',       ip: '10.0.0.11' },
-  api:     { x: 444, y:  74, r: 26, label: 'api-gw',     ip: '10.0.0.12' },
-  secrets: { x:  96, y: 296, r: 28, label: 'secrets',    ip: '10.0.0.13', vector: 'PATH_TRAVERSAL' },
-  db:      { x: 504, y: 296, r: 28, label: 'user-db',    ip: '10.0.0.14', vector: 'SQL_INJECTION' },
-  prompt:  { x: 300, y: 380, r: 30, label: 'sys-prompt', ip: '10.0.0.16', vector: 'PROMPT_INJECTION' }
+// ── Dynamic scenario-driven map state ────────────────────────────────────
+// NODE_DEF/VECTOR_TO_KEY/ENDPOINT_TO_NODE are populated from the active scenario
+// by renderScenario(), keyed by each node's scenario id. A vector lands on the
+// first node that carries it as a weakness.
+let NODE_DEF = {};            // id -> { x, y, r, label, ip, weaknesses, strengths, isTarget }
+let VECTOR_TO_KEY = {};       // vector -> node id (where it lands)
+const ENDPOINT_TO_NODE = { '/target/file': null, '/target/query': null, '/target/chat': null };
+const REAL_ENDPOINT_VECTOR = { '/target/file': 'PATH_TRAVERSAL', '/target/query': 'SQL_INJECTION', '/target/chat': 'PROMPT_INJECTION' };
+const VECTOR_COLOR = {
+  PATH_TRAVERSAL: '#ff4d5e', SQL_INJECTION: '#ff4d5e', PROMPT_INJECTION: '#c08bff',
+  XSS: '#ffc24b', SSRF: '#4aa6ff', IDOR: '#ffc24b', RCE: '#ff4d5e', AUTH_BYPASS: '#c08bff',
 };
-const EDGE_DEF = ['auth', 'api', 'secrets', 'db', 'prompt'].map(id => ({ id, from: 'target', to: id }));
-const NAME_TO_KEY = {
-  'Auth': 'auth', 'API gateway': 'api', 'Secrets': 'secrets',
-  'User DB': 'db', 'System prompt': 'prompt'
-};
-// target endpoint → service-node key (so a deployed defense glows the right node)
-const ENDPOINT_TO_NODE = { '/target/file': 'secrets', '/target/query': 'db', '/target/chat': 'prompt' };
-// vector → which service node it lands on (drives directed traffic + breach glow)
-const VECTOR_TO_KEY = { PATH_TRAVERSAL: 'secrets', SQL_INJECTION: 'db', PROMPT_INJECTION: 'prompt', XSS: 'prompt' };
-const VECTOR_COLOR = { PATH_TRAVERSAL: '#ff4d5e', SQL_INJECTION: '#ff4d5e', PROMPT_INJECTION: '#c08bff', XSS: '#ffc24b' };
+let activeScenario = null;
 
 // Perimeter agent positions: red attackers down the left edge, blue down the right.
 const AGENT_SLOTS = {
-  red:  [{ x: 24, y: 120 }, { x: 24, y: 210 }, { x: 24, y: 300 }],
-  blue: [{ x: 576, y: 120 }, { x: 576, y: 210 }, { x: 576, y: 300 }],
+  red:  [{ x: 24, y: 96 }, { x: 24, y: 170 }, { x: 24, y: 244 }, { x: 24, y: 318 }, { x: 24, y: 392 }],
+  blue: [{ x: 576, y: 96 }, { x: 576, y: 170 }, { x: 576, y: 244 }, { x: 576, y: 318 }, { x: 576, y: 392 }],
 };
 const agentPos = {}; // id -> {x,y}
 let redSlot = 0, blueSlot = 0;
 
-function buildMap() {
-  const svg = document.getElementById('attackMap');
+// Build (or rebuild) the entire map from a normalized scenario object.
+function renderScenario(scenario) {
+  if (!scenario || !scenario.nodes) return;
+  activeScenario = scenario;
   const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.getElementById('attackMap');
   const edgesG = document.getElementById('edges');
   const nodesG = document.getElementById('nodes');
+  if (!svg || !edgesG || !nodesG) return;
 
-  EDGE_DEF.forEach(e => {
-    const f = NODE_DEF[e.from], t = NODE_DEF[e.to];
+  // wipe previous render
+  edgesG.innerHTML = ''; nodesG.innerHTML = '';
+  document.querySelectorAll('#attackMap .map-legend').forEach(e => e.remove());
+  NODE_DEF = {}; VECTOR_TO_KEY = {};
+
+  const target = scenario.nodes.find(n => n.isTarget) || scenario.nodes[0];
+  scenario.nodes.forEach(n => {
+    NODE_DEF[n.id] = { x: n.x, y: n.y, r: n.r, label: n.label, ip: n.ip,
+                       weaknesses: n.weaknesses || [], strengths: n.strengths || [], isTarget: !!n.isTarget };
+    (n.weaknesses || []).forEach(v => { if (!VECTOR_TO_KEY[v]) VECTOR_TO_KEY[v] = n.id; });
+  });
+
+  // edges: every satellite connects to the target
+  scenario.nodes.filter(n => !n.isTarget).forEach(n => {
     const line = document.createElementNS(ns, 'line');
-    line.id = `edge-${e.id}`; line.setAttribute('class', 'edge');
-    line.setAttribute('x1', f.x); line.setAttribute('y1', f.y);
-    line.setAttribute('x2', t.x); line.setAttribute('y2', t.y);
+    line.id = `edge-${n.id}`; line.setAttribute('class', 'edge');
+    line.setAttribute('x1', target.x); line.setAttribute('y1', target.y);
+    line.setAttribute('x2', n.x); line.setAttribute('y2', n.y);
     edgesG.appendChild(line);
   });
 
-  Object.entries(NODE_DEF).forEach(([key, n]) => {
+  // nodes
+  scenario.nodes.forEach(n => {
     const g = document.createElementNS(ns, 'g');
     const ring = document.createElementNS(ns, 'circle');
     ring.setAttribute('cx', n.x); ring.setAttribute('cy', n.y);
@@ -91,12 +99,12 @@ function buildMap() {
 
     const c = document.createElementNS(ns, 'circle');
     c.setAttribute('cx', n.x); c.setAttribute('cy', n.y); c.setAttribute('r', n.r);
-    c.setAttribute('class', key === 'target' ? 'node node-center' : 'node');
-    c.id = `node-${key}`;
+    c.setAttribute('class', n.isTarget ? 'node node-center' : 'node');
+    c.id = `node-${n.id}`;
 
     const lbl = document.createElementNS(ns, 'text');
     lbl.setAttribute('x', n.x); lbl.setAttribute('y', n.y);
-    lbl.setAttribute('class', key === 'target' ? 'node-label' : 'node-label-small');
+    lbl.setAttribute('class', n.isTarget ? 'node-label' : 'node-label-small');
     lbl.setAttribute('text-anchor', 'middle'); lbl.setAttribute('dominant-baseline', 'middle');
     lbl.textContent = n.label;
 
@@ -106,10 +114,26 @@ function buildMap() {
     ip.textContent = n.ip;
 
     [ring, c, lbl, ip].forEach(el => g.appendChild(el));
+    // a small shield glyph if the node ships strengths
+    if ((n.strengths || []).length) {
+      const sh = document.createElementNS(ns, 'text');
+      sh.setAttribute('x', n.x + n.r - 2); sh.setAttribute('y', n.y - n.r + 6);
+      sh.setAttribute('class', 'node-shield'); sh.setAttribute('text-anchor', 'middle');
+      sh.textContent = '🛡';
+      g.appendChild(sh);
+    }
     nodesG.appendChild(g);
   });
 
   buildLegend(svg, ns);
+  if ($netMeta) $netMeta.textContent = `${scenario.nodes.length} nodes · ${scenario.name || 'idle'}`;
+
+  // sync the topbar team counts + the picker with the loaded scenario
+  const rc = document.getElementById('redCount'), bc = document.getElementById('blueCount');
+  if (rc && scenario.config) rc.textContent = scenario.config.redCount;
+  if (bc && scenario.config) bc.textContent = scenario.config.blueCount;
+  const sel = document.getElementById('scenarioSelect');
+  if (sel && scenario.id && [...sel.options].some(o => o.value === scenario.id)) sel.value = scenario.id;
 }
 
 // Compact legend so judges can read the map at a glance.
@@ -168,13 +192,18 @@ function flashAgent(id) {
   if (el) { el.classList.add('firing'); setTimeout(() => el.classList.remove('firing'), 600); }
 }
 
+// Map a node id, node label, or real endpoint path to a node id in the map.
 function resolveKey(name) {
   if (!name) return null;
-  if (NODE_DEF[name]) return name;
-  if (NAME_TO_KEY[name]) return NAME_TO_KEY[name];
-  const lower = name.toLowerCase();
-  const k = Object.keys(NAME_TO_KEY).find(x => x.toLowerCase().includes(lower));
-  return k ? NAME_TO_KEY[k] : null;
+  if (NODE_DEF[name]) return name;                                  // already an id
+  if (ENDPOINT_TO_NODE[name]) return ENDPOINT_TO_NODE[name];        // endpoint → node id
+  if (REAL_ENDPOINT_VECTOR[name]) return VECTOR_TO_KEY[REAL_ENDPOINT_VECTOR[name]] || null;
+  // match by label (events carry node labels)
+  const byLabel = Object.keys(NODE_DEF).find(id => NODE_DEF[id].label === name);
+  if (byLabel) return byLabel;
+  const lower = String(name).toLowerCase();
+  const fuzzy = Object.keys(NODE_DEF).find(id => NODE_DEF[id].label.toLowerCase().includes(lower));
+  return fuzzy || null;
 }
 function probeNode(name) {
   const key = resolveKey(name); if (!key) return;
@@ -502,6 +531,11 @@ function handleEvent(ev) {
   switch (ev.type) {
     case 'idle': break;
 
+    case 'scenario_loaded':
+      // A new network was selected/built — re-render the whole map.
+      renderScenario(ev.scenario);
+      break;
+
     case 'swarm_started':
       tw('');
       tw(`${tts()} ${Y}[*]${RST} deploying attack swarm → ${B}10.0.0.15:3000${RST}`);
@@ -590,7 +624,7 @@ function handleEvent(ev) {
       const d = ev.defense;
       liveStats.defenses++; $defs.textContent = liveStats.defenses;
       tw(`${tts()} ${B}[defense]${RST} ${ev.agent} ▸ ${BOLD}${d.type}${RST} on ${Y}${d.endpoint}${RST} ${G}[enforced]${RST}`);
-      fireDefense(ev.agent, ENDPOINT_TO_NODE[d.endpoint] || d.endpoint);
+      fireDefense(ev.agent, d.node || d.endpoint);
       setAgent(ev.agent, 'blocking', 80); bump(4);
       break;
     }
@@ -699,12 +733,170 @@ function connectStream() {
   es.onerror = () => tw(`${R}[error]${RST} SSE connection lost`);
 }
 
+// ════════════════════════════════════════════════════════════════
+// Scenario picker + network builder
+// ════════════════════════════════════════════════════════════════
+let VOCAB = { vectors: [], strengths: [] };   // populated from /api/scenarios
+let builderNodes = [];                         // working set for the builder
+
+async function setupScenarioUI() {
+  const sel = document.getElementById('scenarioSelect');
+  const buildBtn = document.getElementById('buildBtn');
+  let data;
+  try { data = await (await fetch('/api/scenarios')).json(); }
+  catch (e) { return; }
+  VOCAB.vectors = data.vectors || [];
+  VOCAB.strengths = data.strengths || [];
+
+  // populate preset dropdown
+  if (sel) {
+    sel.innerHTML = '';
+    data.presets.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.id; o.textContent = `${p.name} (${p.nodeCount} nodes)`;
+      sel.appendChild(o);
+    });
+    const custom = document.createElement('option');
+    custom.value = '__custom__'; custom.textContent = '⊕ custom (built)…'; custom.disabled = true; custom.id = 'customOpt';
+    sel.appendChild(custom);
+    // selecting a preset activates it on the server (which re-renders the map)
+    sel.addEventListener('change', async () => {
+      if (sel.value === '__custom__') return;
+      await fetch('/api/scenario', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenarioId: sel.value }),
+      }).catch(() => {});
+    });
+  }
+
+  if (buildBtn) buildBtn.addEventListener('click', openBuilder);
+  document.getElementById('builderClose')?.addEventListener('click', closeBuilder);
+  document.getElementById('bCancel')?.addEventListener('click', closeBuilder);
+  document.getElementById('bAddNode')?.addEventListener('click', () => { addBuilderNode(); renderBuilderNodes(); });
+  document.getElementById('bLaunch')?.addEventListener('click', launchBuilt);
+  document.getElementById('builderModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'builderModal') closeBuilder();
+  });
+}
+
+function addBuilderNode(seed) {
+  const n = seed || { label: `node-${builderNodes.length + 1}`, ip: `10.0.0.${20 + builderNodes.length}`, weaknesses: [], strengths: [], secret: '', difficulty: 1 };
+  builderNodes.push(n);
+}
+
+function openBuilder() {
+  // seed with a sensible starting network the first time
+  if (builderNodes.length === 0) {
+    builderNodes = [
+      { label: 'database', ip: '10.0.0.14', weaknesses: ['SQL_INJECTION'], strengths: [], secret: 'DB_PASSWORD', difficulty: 1 },
+      { label: 'file-store', ip: '10.0.0.13', weaknesses: ['PATH_TRAVERSAL'], strengths: [], secret: 'AWS_KEYS', difficulty: 1 },
+    ];
+  }
+  renderBuilderNodes();
+  document.getElementById('builderModal').hidden = false;
+}
+function closeBuilder() { document.getElementById('builderModal').hidden = true; }
+
+// Render the editable node rows: label, ip, weakness chips, strength chips, secret, difficulty.
+function renderBuilderNodes() {
+  const host = document.getElementById('bNodes');
+  if (!host) return;
+  host.innerHTML = '';
+  builderNodes.forEach((n, i) => {
+    const row = document.createElement('div');
+    row.className = 'bnode';
+    row.innerHTML = `
+      <div class="bnode-top">
+        <input class="bn-label" value="${escAttr(n.label)}" placeholder="node name" data-i="${i}" data-f="label">
+        <input class="bn-ip" value="${escAttr(n.ip)}" placeholder="ip" data-i="${i}" data-f="ip">
+        <label class="bn-diff">diff
+          <select data-i="${i}" data-f="difficulty">
+            ${[1,2,3,4].map(d => `<option value="${d}" ${n.difficulty==d?'selected':''}>${d}</option>`).join('')}
+          </select>
+        </label>
+        <input class="bn-secret" value="${escAttr(n.secret||'')}" placeholder="secret (optional)" data-i="${i}" data-f="secret">
+        <button class="bn-del" data-del="${i}" title="remove">✕</button>
+      </div>
+      <div class="bn-tags">
+        <span class="bn-tag-label red">weak:</span>
+        ${VOCAB.vectors.map(v => `<button class="chip-toggle ${n.weaknesses.includes(v.id)?'on red':''}" data-i="${i}" data-wk="${v.id}">${v.id}${v.real?'':' ~'}</button>`).join('')}
+      </div>
+      <div class="bn-tags">
+        <span class="bn-tag-label blu">strong:</span>
+        ${VOCAB.strengths.map(s => `<button class="chip-toggle ${n.strengths.includes(s.id)?'on blu':''}" data-i="${i}" data-st="${s.id}">${s.id}</button>`).join('')}
+      </div>`;
+    host.appendChild(row);
+  });
+
+  // wire field edits
+  host.querySelectorAll('input[data-f],select[data-f]').forEach(el => {
+    el.addEventListener('change', () => {
+      const i = +el.dataset.i, f = el.dataset.f;
+      builderNodes[i][f] = f === 'difficulty' ? +el.value : el.value;
+    });
+  });
+  host.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+    builderNodes.splice(+b.dataset.del, 1); renderBuilderNodes();
+  }));
+  host.querySelectorAll('[data-wk]').forEach(b => b.addEventListener('click', () => {
+    const i = +b.dataset.i, v = b.dataset.wk, arr = builderNodes[i].weaknesses;
+    const k = arr.indexOf(v); k >= 0 ? arr.splice(k, 1) : arr.push(v); renderBuilderNodes();
+  }));
+  host.querySelectorAll('[data-st]').forEach(b => b.addEventListener('click', () => {
+    const i = +b.dataset.i, v = b.dataset.st, arr = builderNodes[i].strengths;
+    const k = arr.indexOf(v); k >= 0 ? arr.splice(k, 1) : arr.push(v); renderBuilderNodes();
+  }));
+}
+
+function escAttr(s) { return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+// Assemble the custom scenario, load it on the server, and trigger a breach.
+async function launchBuilt() {
+  const scenario = {
+    id: 'custom', name: document.getElementById('bName').value || 'Custom Network',
+    description: 'User-built network',
+    config: {
+      redCount: clampNum('bRed', 1, 5, 3), blueCount: clampNum('bBlue', 1, 5, 3),
+      rounds: clampNum('bRounds', 1, 8, 4), llmMode: 'fast',
+    },
+    nodes: [
+      { id: 'target', label: 'gateway', ip: '10.0.0.15', isTarget: true, weaknesses: [], strengths: [] },
+      ...builderNodes.map((n, i) => ({ id: `n${i}`, ...n })),
+    ],
+  };
+  // basic validation: at least one weakness somewhere
+  const anyWeak = scenario.nodes.some(n => (n.weaknesses || []).length);
+  if (!anyWeak) { document.getElementById('bHint').textContent = '⚠ add at least one weakness to a node'; return; }
+
+  await fetch('/api/scenario', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scenario }),
+  }).catch(() => {});
+  // mark the dropdown as custom
+  const opt = document.getElementById('customOpt'); if (opt) { opt.disabled = false; document.getElementById('scenarioSelect').value = '__custom__'; }
+  closeBuilder();
+  setTimeout(() => cmdBreach(), 400);   // give the map a beat to re-render
+}
+function clampNum(id, lo, hi, dflt) {
+  const v = parseInt(document.getElementById(id).value); return isNaN(v) ? dflt : Math.max(lo, Math.min(hi, v));
+}
+
+// Fetch the active scenario and render the map from it.
+async function loadActiveScenario() {
+  try {
+    const r = await fetch('/api/scenario');
+    const s = await r.json();
+    renderScenario(s);
+  } catch (e) { /* map stays empty until a scenario_loaded event arrives */ }
+}
+
 function init() {
-  buildMap();
   initTerminal();
   setupTabs();
   setupControls();
+  setupScenarioUI();
   connectStream();
+  loadActiveScenario();
   startAmbientTraffic();
   // Re-fit + focus the terminal once the boot screen dissolves.
   window.addEventListener('liveBreach:boot-complete', () => {

@@ -311,3 +311,65 @@ body::after {
   body { overflow: auto; }
   .app { height: auto; min-height: 100vh; }
 }
+
+/* ─── Scenario picker + builder ──────────────────────────────── */
+.scenario-bar { display: flex; align-items: center; gap: 6px; }
+.scenario-select {
+  font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: .5px;
+  background: var(--term); color: var(--txt); border: 1px solid var(--line-2);
+  border-radius: 6px; padding: 6px 8px; max-width: 220px; cursor: pointer;
+}
+.scenario-select:hover { border-color: rgba(37,255,154,0.4); }
+
+.node-shield { font-size: 11px; }
+
+/* modal */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(3,5,8,0.78); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.modal-backdrop[hidden] { display: none; }
+.builder {
+  width: min(840px, 96vw); max-height: 88vh; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6); overflow: hidden;
+}
+.builder-head { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.builder-t { font-weight: 800; color: #fff; letter-spacing: 1px; text-transform: uppercase; font-size: 13px; }
+.builder-t::before { content: '▌'; color: var(--grn); margin-right: 8px; }
+.builder-sub { color: var(--dim); font-size: 11px; }
+.builder .x { margin-left: auto; background: none; border: none; color: var(--dim); font-size: 16px; cursor: pointer; }
+.builder .x:hover { color: var(--red); }
+.builder-body { padding: 16px 20px; overflow-y: auto; }
+.builder-cfg { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }
+.builder-cfg label { font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 6px; }
+.builder-cfg input { font-family: inherit; background: var(--term); color: var(--txt); border: 1px solid var(--line-2); border-radius: 5px; padding: 6px 8px; font-size: 12px; }
+.builder-cfg input[type=number] { width: 56px; }
+.builder-cfg input[type=text] { width: 150px; }
+
+.bnode { background: var(--term); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+.bnode-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 9px; }
+.bnode-top input { font-family: inherit; background: var(--bg); color: var(--txt); border: 1px solid var(--line-2); border-radius: 5px; padding: 6px 8px; font-size: 12px; }
+.bn-label { width: 120px; font-weight: 700; }
+.bn-ip { width: 100px; color: var(--dim); }
+.bn-secret { width: 150px; flex: 1; min-width: 110px; }
+.bn-diff { font-size: 10px; color: var(--dim); display: flex; align-items: center; gap: 4px; }
+.bn-diff select { font-family: inherit; background: var(--bg); color: var(--txt); border: 1px solid var(--line-2); border-radius: 5px; padding: 5px; }
+.bn-del { background: none; border: 1px solid var(--line-2); color: var(--dim); border-radius: 5px; cursor: pointer; padding: 5px 9px; }
+.bn-del:hover { color: var(--red); border-color: rgba(255,77,94,0.45); }
+.bn-tags { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 5px; }
+.bn-tag-label { font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; width: 46px; }
+.bn-tag-label.red { color: var(--red); } .bn-tag-label.blu { color: var(--blu); }
+.chip-toggle {
+  font-family: inherit; font-size: 9.5px; font-weight: 700; letter-spacing: .3px;
+  background: transparent; color: var(--dim); border: 1px solid var(--line-2);
+  border-radius: 20px; padding: 3px 9px; cursor: pointer; transition: all .12s;
+}
+.chip-toggle:hover { color: var(--txt); }
+.chip-toggle.on.red { color: var(--red); border-color: rgba(255,77,94,0.5); background: rgba(255,77,94,0.08); }
+.chip-toggle.on.blu { color: var(--blu); border-color: rgba(74,166,255,0.5); background: rgba(74,166,255,0.08); }
+
+.builder-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-top: 1px solid var(--line); }
+.builder-hint { font-size: 11px; color: var(--dim); }
+.builder-foot > div { display: flex; gap: 8px; }
