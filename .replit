@@ -1,0 +1,29 @@
+# Replit configuration for Live Breach
+# Run with the green ▶ button. Requires Node 22+ (for node:sqlite, used by the
+# real SQL-injection target). Set API keys in the Secrets (🔒) panel — see below.
+
+run = "npm install && npm run dev"
+entrypoint = "server.js"
+modules = ["nodejs-22"]
+
+hidden = [".config", "package-lock.json"]
+
+[nix]
+channel = "stable-24_05"
+
+[env]
+# Use OpenAI for the agents (fast, not rate-limited). Add the keys in Secrets.
+LLM_PROVIDER = "openai"
+VICTIM_PROVIDER = "openai"
+DEMO_FAST = "false"
+
+[[ports]]
+localPort = 3000
+externalPort = 80
+
+[deployment]
+run = ["sh", "-c", "npm install && node server.js"]
+deploymentTarget = "cloudrun"
+
+[gitHubImport]
+requiredFiles = [".replit", "package.json"]

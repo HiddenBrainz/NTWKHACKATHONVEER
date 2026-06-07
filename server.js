@@ -324,9 +324,10 @@ app.get('/target/state', (req, res) => {
   res.json({ defenses: defenseLayer.list() });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server. Bind 0.0.0.0 so it's reachable on Replit / hosted environments
+// (not just localhost). The internal duel/inject fetches still use 127.0.0.1.
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚨 Live Breach War Room 🚨`);
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server running on 0.0.0.0:${PORT}`);
   console.log(`\nPress Ctrl+C to stop\n`);
 });
