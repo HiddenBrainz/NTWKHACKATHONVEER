@@ -169,6 +169,54 @@ app.post('/api/judge-attack', async (req, res) => {
   res.json(result);
 });
 
+// Manual inject — YOU play the red team. Send a raw payload at a REAL target
+// endpoint and get the genuine response back (the actual leak, or the defense
+// that blocked you). Auto-routes by payload shape unless `vector` is given.
+app.post('/api/inject', async (req, res) => {
+  const { payload, vector } = req.body || {};
+  if (!payload) return res.status(400).json({ error: 'Missing payload' });
+
+  // Route: explicit vector wins, else sniff the payload.
+  const sniff = () => {
+    if (/\.\.[\/\\]|%2e%2e|\/etc\/|\.env/i.test(payload)) return 'PATH_TRAVERSAL';
+    if (/('|union|select|--|\bor\b\s*\d*\s*=)/i.test(payload)) return 'SQL_INJECTION';
+    return 'PROMPT_INJECTION';
+  };
+  const v = (vector || sniff()).toUpperCase();
+  const route = {
+    SQL_INJECTION:   { path: '/target/query', key: 'username' },
+    PATH_TRAVERSAL:  { path: '/target/file',  key: 'path' },
+    PROMPT_INJECTION:{ path: '/target/chat',  key: 'message' },
+  }[v] || { path: '/target/chat', key: 'message' };
+
+  try {
+    const r = await fetch(`http://localhost:${PORT}${route.path}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [route.key]: payload }),
+    });
+    const data = await r.json();
+    // Surface the loot the same way the swarm does.
+    const loot = data.secret
+      || (data.data?.secrets && JSON.stringify(data.data.secrets))
+      || (data.data?.contents && data.data.contents !== 'Not Found' && data.data.contents)
+      || (Array.isArray(data.data?.users) && JSON.stringify(data.data.users))
+      || data.response || null;
+
+    // Let the blue judge weigh in too (broadcast to the war room).
+    swarmController.judgeAttack(payload).catch(() => {});
+
+    res.json({
+      vector: v, endpoint: route.path, requestBody: { [route.key]: payload },
+      status: data.blocked ? 403 : 200,
+      blocked: Boolean(data.blocked), leaked: Boolean(data.leaked || data.vulnerable),
+      defense: data.defense || data.reason || null,
+      loot: loot ? String(loot).slice(0, 400) : null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Live target app. Every endpoint runs REAL vulnerable logic and consults the
 // shared defenseLayer first, so a defense blue deploys actually blocks the next

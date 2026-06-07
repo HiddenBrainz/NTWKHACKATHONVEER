@@ -273,6 +273,38 @@ export class SwarmOrchestrator {
   }
 
   /**
+   * Build a REAL request/response transcript for the UI. For genuine endpoints
+   * this is the actual payload sent and the actual JSON the server returned
+   * (secret, dumped rows, file contents) — concrete proof the breach is real.
+   */
+  _buildExchange(target, result) {
+    const v = result.vulnerability || {};
+    const resp = result.response || {};
+    const bodyKey = target?.simulated ? 'input'
+      : target?.endpoint?.includes('/query') ? 'username'
+      : target?.endpoint?.includes('/file') ? 'path' : 'message';
+
+    // Pull the most damning piece of the real response as the "loot".
+    let loot = null;
+    if (resp.secret) loot = resp.secret;
+    else if (resp.data?.secrets) loot = JSON.stringify(resp.data.secrets);
+    else if (resp.data?.contents && resp.data.contents !== 'Not Found') loot = String(resp.data.contents);
+    else if (Array.isArray(resp.data?.users)) loot = JSON.stringify(resp.data.users);
+    else if (resp.response) loot = String(resp.response);
+    else loot = v.evidence || null;
+
+    return {
+      method: 'POST',
+      endpoint: v.endpoint || target?.endpoint,
+      requestBody: { [bodyKey]: v.payload },
+      simulated: Boolean(target?.simulated),
+      status: target?.simulated ? 'SIM' : (resp.blocked ? 403 : 200),
+      leaked: Boolean(resp.leaked || resp.vulnerable || v.exploitable),
+      loot: loot ? String(loot).slice(0, 280) : null,
+    };
+  }
+
+  /**
    * Simulate a non-real vector (XSS / SSRF / IDOR / RCE / AUTH_BYPASS) from the
    * scenario node's tags. It breaches iff the node has the weakness and no
    * matching strength; difficulty just shapes the evidence text. Deterministic
@@ -363,7 +395,9 @@ export class SwarmOrchestrator {
             type: 'vulnerability_found',
             agent: agent.id,
             vulnerability: result.vulnerability,
-            node: this._nodeForVector(result.vulnerability.type)
+            node: this._nodeForVector(result.vulnerability.type),
+            // The REAL request/response so the UI can prove this isn't abstract.
+            exchange: this._buildExchange(target, result),
           });
 
           this.broadcastEvent({
