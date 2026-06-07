@@ -80,3 +80,15 @@ It indexes your LOCAL working tree — including uncommitted edits — so run it
 from inside the repo. **After you change code, re-run `perseus index` before
 you query** so results reflect your edits, not a stale snapshot.
 <!-- /perseus:rules -->
+
+## Auto-backup: push to `auto-backup` branch after every meaningful change
+
+This repo is worked on by multiple parallel agents. After completing any meaningful unit of work (a feature, a fix, a refactor — not mid-edit), **every agent must push to the `auto-backup` branch**:
+
+```bash
+git add -A
+git commit -m "auto-backup $(date +%Y-%m-%dT%H:%M)" --allow-empty
+git push origin HEAD:auto-backup --force
+```
+
+Push to `auto-backup`, **not** `main`. The `main` branch is for deliberate, reviewed commits only. The `auto-backup` branch is the shared live snapshot that keeps all parallel agents in sync.
