@@ -192,6 +192,7 @@ function renderLesson() {
       html += `<div class="hints">${l.hints.map(h => `<span class="hint-chip" data-hint="${escAttr(h)}">💡 ${escHtml(h)}</span>`).join('')}</div>`;
     }
     html += `<div class="try"><input id="payloadInput" placeholder="type your payload here…" /><button id="tryBtn">▶ attack</button></div>`;
+    html += `<div class="summon"><button id="summonBtn" class="summon-btn">🤖 stuck? summon an AI agent to solve it</button></div>`;
     html += `<div class="result" id="result"></div>`;
   }
   html += `<button class="nextbtn ${(done.has(l.id) || l.quiz) ? 'show' : ''}" id="nextBtn">${current < LESSONS.length - 1 ? 'next lesson →' : 'finish 🎓'}</button>`;
@@ -209,6 +210,7 @@ function renderLesson() {
     if (current < LESSONS.length - 1) { current++; renderLesson(); }
     else finishCourse();
   });
+  document.getElementById('summonBtn')?.addEventListener('click', () => summonAgent(l));
 
   // reset per-lesson scoring timers
   game.lessonStart = Date.now();
@@ -316,6 +318,33 @@ async function aiDefends(vector) {
     result.innerHTML += `<div class="dim">(defender error — try again)</div>`;
   }
   duel.defending = false;
+}
+
+// Summon an AI red agent to solve the current lesson — it crafts a real payload,
+// fires it, and explains. The student learns by watching, then tries themselves.
+async function summonAgent(l) {
+  const result = document.getElementById('result');
+  result.className = 'result show';
+  result.innerHTML = `<div class="ai-think">🤖 <span class="dim">AI agent is analyzing the target and crafting a payload…</span></div>`;
+  try {
+    const r = await fetch('/api/solve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vector: l.vector }),
+    });
+    const d = await r.json();
+    result.className = 'result show ' + (d.leaked ? 'win' : 'fail');
+    result.innerHTML = `<b class="${d.leaked ? 'grn' : 'amb'}">🤖 AI AGENT ${d.leaked ? 'BREACHED IT' : 'TRIED'}</b>
+      <div class="ai-reason">"${escHtml(d.explain)}"</div>
+      <div class="summon-payload">payload: <code>${escHtml(d.payload)}</code></div>
+      ${d.loot ? `<pre>${escHtml(String(d.loot).slice(0, 160))}</pre>` : ''}
+      <div class="why">Now <b>you</b> try it — type that payload (or your own variation) into the box above. You only get XP for solving it yourself.</div>`;
+    // prefill so they can run it themselves
+    const input = document.getElementById('payloadInput');
+    if (input) { input.value = d.payload; game.hintedThisLesson = true; }
+    tutorSay('bot', `I solved it with <code>${escHtml(d.payload)}</code>. ${stripTags(d.explain)} Try running it yourself now.`);
+  } catch (e) {
+    result.innerHTML = `<span class="amb">the AI agent hit an error — try again</span>`;
+  }
 }
 
 function markDone(l) { done.add(l.id); renderLessonList(); }
