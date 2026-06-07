@@ -151,6 +151,31 @@ app.get('/api/swarm/report', (req, res) => {
   res.json(report || { message: 'No active swarm' });
 });
 
+// You-vs-AI-defender: the player just landed an attack; a blue AI agent reasons
+// about it (real LLM) and deploys a REAL defense to the shared defense layer, so
+// the player's next attempt genuinely gets blocked until they adapt around it.
+app.post('/api/defend', async (req, res) => {
+  const { vector } = req.body || {};
+  const map = {
+    SQL_INJECTION:   { endpoint: '/target/query', filter: 'INPUT_VALIDATION' },
+    PATH_TRAVERSAL:  { endpoint: '/target/file',  filter: 'INPUT_VALIDATION' },
+    PROMPT_INJECTION:{ endpoint: '/target/chat',  filter: 'INPUT_VALIDATION' },
+  }[String(vector || '').toUpperCase()] || { endpoint: '/target/query', filter: 'INPUT_VALIDATION' };
+
+  let rationale;
+  try {
+    rationale = await tutorReason(
+      'You are a blue-team AI defender. In ONE short sentence, say what defense you are deploying and why, in response to the attack.',
+      `The attacker just succeeded with a ${vector} attack on ${map.endpoint}. Deploy a filter to block it.`,
+      { maxTokens: 60, timeout: 7000, provider: (process.env.BLUE_PROVIDER || 'anthropic') }
+    );
+  } catch { rationale = `Deploying an input-validation filter on ${map.endpoint} to block ${vector}.`; }
+
+  // Actually enforce the defense so the next inject is really blocked.
+  defenseLayer.deploy(map.endpoint, map.filter, { reason: `learn-mode defense vs ${vector}` });
+  res.json({ ok: true, endpoint: map.endpoint, filter: map.filter, rationale: rationale || `Filter deployed on ${map.endpoint}.` });
+});
+
 // AI tutor — explains security concepts in a learning context. Powers Learn
 // Mode: answers a student's question or explains what just happened.
 app.post('/api/tutor', async (req, res) => {

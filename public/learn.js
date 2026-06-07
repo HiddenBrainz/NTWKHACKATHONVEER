@@ -69,10 +69,24 @@ const LESSONS = [
     ],
     why: `Defense-in-depth: each fix neutralizes one vector. In the war room, blue agents deploy exactly these — and you can watch an attack get <b>403 BLOCKED</b> live. Great defenders understand attacks; that's why you learned offense first.`,
   },
+  {
+    id: 'duel',
+    goal: 'Beat a live AI defender',
+    title: 'You vs the AI 🤖',
+    intro: `Boss level. You attack the database — but now a <b>live AI blue-team agent</b> is watching. Every time you break in, it <b>reasons about your attack and deploys a real defense</b>. You'll have to <b>adapt</b> to get back in. First to outsmart the other wins.`,
+    task: `Land a SQL injection. When the AI blocks you, read its reasoning and craft a payload that slips past the filter. Beat it <b>2 rounds</b> to win.`,
+    hints: ["' OR '1'='1", "' OR 'a'='a", "' OR 1 LIKE 1-- "],
+    vector: 'SQL_INJECTION',
+    duel: true,
+    why: `You just out-adapted an AI defender in real time — exactly what the autonomous agents do in the war room, except <b>you</b> were the red team. Attack and defense co-evolve; the winner is whoever adapts faster.`,
+  },
 ];
 
 let current = 0;
 const done = new Set();
+
+// ── Duel state (You vs AI defender) ──
+const duel = { round: 0, needed: 2, defending: false };
 
 // ── Gamification state ──
 const game = {
@@ -200,6 +214,12 @@ function renderLesson() {
   game.lessonStart = Date.now();
   game.hintedThisLesson = false;
 
+  // duel lessons start fresh: reset rounds + clear any deployed defenses
+  if (l.duel) {
+    duel.round = 0; duel.defending = false;
+    fetch('/api/reset', { method: 'POST' }).catch(() => {});  // clears the defense layer
+  }
+
   // tutor auto-intro for this lesson
   tutorSay('bot', lessonIntroLine(l));
 }
@@ -231,6 +251,24 @@ async function runAttempt(payload) {
     result.className = 'result show block';
     result.innerHTML = `<b class="blu">🛡 403 BLOCKED</b> — ${escHtml(d.defense || 'a defense stopped you')}.
       <div class="why">A filter caught your payload. Try a variation the regex doesn't match — real attackers adapt around defenses.</div>`;
+  } else if (won && l.duel) {
+    // Duel: a breach advances a round, then the AI defender adapts.
+    duel.round++;
+    awardXP(40, `round ${duel.round} breach`);
+    if (duel.round >= duel.needed) {
+      markDone(l);
+      result.className = 'result show win';
+      result.innerHTML = `<b class="grn">🏆 YOU WIN</b> — you out-adapted the AI defender ${duel.needed} rounds straight.
+        <pre>${escHtml(String(d.loot || '').slice(0, 140))}</pre>
+        <div class="why">${l.why}</div>`;
+      document.getElementById('nextBtn').classList.add('show');
+      tutorSay('bot', `🏆 You beat the AI! You adapted faster than it could defend — that's the whole game of offensive security.`);
+    } else {
+      result.className = 'result show win';
+      result.innerHTML = `<b class="grn">✓ ROUND ${duel.round}</b> — you're in. But the AI is reacting…
+        <pre>${escHtml(String(d.loot || '').slice(0, 120))}</pre>`;
+      await aiDefends(l.vector);   // the live AI deploys a real defense
+    }
   } else if (won) {
     const fresh = !done.has(l.id);
     markDone(l);
@@ -256,6 +294,28 @@ async function runAttempt(payload) {
     result.innerHTML = `<b class="amb">No leak yet.</b> The server responded but nothing sensitive came back.
       <div class="why">Tweak your payload — tap a 💡 hint for a working example, or ask the tutor.</div>`;
   }
+}
+
+// The live AI defender reacts: real LLM reasoning + a real deployed filter.
+async function aiDefends(vector) {
+  duel.defending = true;
+  const result = document.getElementById('result');
+  result.innerHTML += `<div class="ai-think">🤖 <span class="dim">AI defender is analyzing your attack…</span></div>`;
+  try {
+    const r = await fetch('/api/defend', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vector }),
+    });
+    const d = await r.json();
+    result.className = 'result show block';
+    result.innerHTML = `<b class="blu">🤖 AI DEFENDER MOVED</b>
+      <div class="ai-reason">"${escHtml(d.rationale)}"</div>
+      <div class="why">It deployed a real <b>${escHtml(d.filter)}</b> filter on <b>${escHtml(d.endpoint)}</b>. Your last payload won't work now — <b>adapt</b>. Tap a 💡 hint if you're stuck, or ask the tutor how to bypass a filter.</div>`;
+    tutorSay('bot', `The AI just blocked your exact payload. Filters match specific patterns — change the shape of your injection (a different always-true condition, or different spacing) so it doesn't match. You've got this.`);
+  } catch (e) {
+    result.innerHTML += `<div class="dim">(defender error — try again)</div>`;
+  }
+  duel.defending = false;
 }
 
 function markDone(l) { done.add(l.id); renderLessonList(); }
