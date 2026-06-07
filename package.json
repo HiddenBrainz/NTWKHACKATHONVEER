@@ -1,0 +1,20 @@
+{
+  "name": "live-breach",
+  "version": "1.0.0",
+  "description": "AI cyber war-room: red-team vs blue-team attack visualization",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "test:llm": "node test-llm.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "openai": "^4.76.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

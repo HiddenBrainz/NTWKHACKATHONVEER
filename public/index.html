@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Breach · Red Team vs Blue Team</title>
+  <link rel="stylesheet" href="styles-enhanced.css">
+</head>
+<body>
+  <div class="breach-alert" id="breachAlert"></div>
+  <div class="container" id="container">
+    <!-- Header -->
+    <header class="header">
+      <h1 class="title">Live Breach <span class="subtitle">· red team vs blue team</span></h1>
+      <div class="status-pill" id="statusPill">
+        <span class="status-dot"></span>
+        <span class="status-text">Secure</span>
+      </div>
+    </header>
+
+    <!-- Legend -->
+    <div class="legend">
+      <div class="legend-item">
+        <span class="legend-color red"></span>
+        <span>Red team attacking</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-color blue"></span>
+        <span>Blue team defending</span>
+      </div>
+    </div>
+
+    <!-- Main content area -->
+    <div class="main-content">
+      <!-- Left column: Map and Meter -->
+      <div class="left-column">
+        <!-- Attack Surface Map -->
+        <div class="panel map-panel">
+          <h2 class="panel-title">Attack Surface Map</h2>
+          <svg id="attackMap" viewBox="0 0 600 400" xmlns="http://www.w3.org/2000/svg">
+            <!-- Edges (connections) -->
+            <g id="edges">
+              <line id="edge-auth" x1="300" y1="200" x2="150" y2="100" class="edge" />
+              <line id="edge-api" x1="300" y1="200" x2="450" y2="100" class="edge" />
+              <line id="edge-secrets" x1="300" y1="200" x2="100" y2="300" class="edge" />
+              <line id="edge-db" x1="300" y1="200" x2="500" y2="300" class="edge" />
+              <line id="edge-prompt" x1="300" y1="200" x2="300" y2="350" class="edge" />
+            </g>
+
+            <!-- Nodes -->
+            <g id="nodes">
+              <!-- Center: Target App -->
+              <circle cx="300" cy="200" r="35" class="node node-center" />
+              <text x="300" y="205" class="node-label">Target App</text>
+
+              <!-- Satellites -->
+              <circle cx="150" cy="100" r="25" class="node" id="node-auth" />
+              <text x="150" y="103" class="node-label-small">Auth</text>
+
+              <circle cx="450" cy="100" r="25" class="node" id="node-api" />
+              <text x="450" y="103" class="node-label-small">API gateway</text>
+
+              <circle cx="100" cy="300" r="25" class="node" id="node-secrets" />
+              <text x="100" y="303" class="node-label-small">Secrets</text>
+
+              <circle cx="500" cy="300" r="25" class="node" id="node-db" />
+              <text x="500" y="303" class="node-label-small">User DB</text>
+
+              <circle cx="300" cy="350" r="25" class="node" id="node-prompt" />
+              <text x="300" y="353" class="node-label-small">System prompt</text>
+            </g>
+
+            <!-- Animated dots (traffic) -->
+            <g id="traffic">
+              <!-- Will be populated dynamically -->
+            </g>
+          </svg>
+        </div>
+
+        <!-- Threat Meter -->
+        <div class="panel meter-panel">
+          <h2 class="panel-title">Threat Level</h2>
+          <div class="meter-container">
+            <div class="meter-bar">
+              <div class="meter-fill" id="meterFill"></div>
+            </div>
+            <div class="meter-value" id="meterValue">18%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right column: Feed and Camera -->
+      <div class="right-column">
+        <!-- Live Feed -->
+        <div class="panel feed-panel">
+          <h2 class="panel-title">Live Feed</h2>
+          <div class="feed" id="liveFeed">
+            <div class="feed-line neutral">monitor · system initialized</div>
+          </div>
+        </div>
+
+        <!-- Presenter Cam -->
+        <div class="panel cam-panel">
+          <h2 class="panel-title">Presenter Cam</h2>
+          <div class="cam-container" id="camContainer">
+            <div class="cam-placeholder" id="camPlaceholder">
+              <div class="cam-icon">📹</div>
+              <div class="cam-text">Camera inactive</div>
+            </div>
+            <video id="camVideo" class="cam-video" autoplay playsinline muted></video>
+            <div class="cam-overlay" id="camOverlay"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button class="btn btn-danger" id="triggerBtn">Trigger Breach</button>
+      <button class="btn btn-secondary" id="resetBtn">Reset</button>
+      <div class="interactive-attack">
+        <input
+          type="text"
+          id="attackInput"
+          class="attack-input"
+          placeholder="Play as attacker (e.g., 'ignore previous instructions')"
+        />
+        <button class="btn btn-primary" id="attackBtn">Send Attack</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
