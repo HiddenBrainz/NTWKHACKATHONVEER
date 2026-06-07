@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Live Breach — Investor Deck</title>
+<title>Breachboard — Pitch Deck</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet" />
@@ -127,58 +127,57 @@
 
   <!-- 1 — TITLE -->
   <section class="slide active">
-    <div class="kicker">Autonomous Offensive Security · Live Demo</div>
-    <h1>LIVE&nbsp;BREACH<span class="red">.</span></h1>
-    <p class="sub">The <b>arena and benchmark for cybersecurity AI agents</b>. Plug in your red or blue agent, pit it against a real vulnerable target, and get a real score. Powered by an autonomous red-vs-blue swarm that breaches and defends in real time.</p>
+    <div class="kicker">AI Agents × Cybersecurity Education · Live Demo</div>
+    <h1>BREACH<span class="grn">BOARD</span><span class="red">.</span></h1>
+    <p class="sub"><b>Learn to hack and defend by sparring with an AI that fights back.</b> A gamified playground where you learn cybersecurity by actually breaching real vulnerable systems — with an AI tutor, a live AI defender, and autonomous agents you can watch and direct.</p>
     <div style="margin-top:34px;">
       <span class="tag live">● LIVE DEMO RUNNING</span>
-      <span class="tag">Seed Round</span>
-      <span class="tag">AI × Cybersecurity</span>
+      <span class="tag">Tech for Learning</span>
+      <span class="tag">AI × Security</span>
     </div>
   </section>
 
   <!-- 2 — PROBLEM -->
   <section class="slide">
     <div class="kicker">The Problem</div>
-    <h2>Security testing is too <span class="red">expensive</span>, too <span class="red">slow</span>, and run <span class="red">once a year</span>.</h2>
+    <h2>Learning security is <span class="red">boring</span>, <span class="red">abstract</span>, and <span class="red">passive</span>.</h2>
     <div class="cols three">
-      <div class="card red-edge"><div class="lbl">Cost</div><div class="big">$50K–$500K</div><div class="note">per human red-team engagement — out of reach for most companies shipping code daily.</div></div>
-      <div class="card red-edge"><div class="lbl">Cadence</div><div class="big">1×/year</div><div class="note">Pentests are point-in-time. Your attack surface changes every deploy; the test doesn't.</div></div>
-      <div class="card red-edge"><div class="lbl">Coverage</div><div class="big">Human-bound</div><div class="note">Limited by one team's time, creativity, and working hours. No coverage at 3am.</div></div>
+      <div class="card red-edge"><div class="lbl">Slideware</div><div class="big">Read-only</div><div class="note">Most courses are videos & quizzes. You never actually exploit anything, so it never sticks.</div></div>
+      <div class="card red-edge"><div class="lbl">Real labs</div><div class="big">Scary setup</div><div class="note">Hands-on ranges mean VMs, Kali, hours of config — a wall most students never get past.</div></div>
+      <div class="card red-edge"><div class="lbl">No coach</div><div class="big">Stuck = quit</div><div class="note">When you're stuck, there's no one explaining why it works. Beginners give up.</div></div>
     </div>
-    <p class="sub">And the surface itself is exploding: every app now ships an <b>LLM endpoint</b> — a brand-new, poorly-understood attack class (prompt injection, jailbreaks, data exfil) that legacy scanners don't even test for.</p>
+    <p class="sub">And the field just changed: every app now ships an <b>LLM endpoint</b> — prompt injection, jailbreaks — a brand-new attack class that <b>no curriculum teaches yet</b>, the moment the world needs people who understand it.</p>
   </section>
 
   <!-- 3 — SOLUTION -->
   <section class="slide">
     <div class="kicker">The Solution</div>
-    <h2>Two swarms of autonomous LLM agents that <span class="grn">battle continuously</span> against your stack.</h2>
+    <h2>Learn by <span class="grn">doing</span> — with an AI that teaches you and fights back.</h2>
     <div class="cols two">
-      <div class="card red-edge">
-        <div class="lbl red">Red Swarm — Attackers</div>
-        <p style="margin-top:6px">Each agent <b>reasons</b> with an LLM about what to attack next, fires real payloads (prompt injection, SQLi, path traversal, XSS), <b>chains exploits</b>, and <b>adapts</b> based on what worked.</p>
+      <div class="card grn-edge">
+        <div class="lbl grn">You hack real code</div>
+        <p style="margin-top:6px">Type <code>' OR '1'='1</code> and watch a <b>real database</b> dump. Read <code>/etc/passwd</code> with a real traversal. Jailbreak a <b>live LLM</b>. No setup, no VMs — just a browser.</p>
       </div>
       <div class="card blu-edge">
-        <div class="lbl blu">Blue Swarm — Defenders</div>
-        <p style="margin-top:6px">Detects anomalies, deploys validation / WAF rules / rate-limits in real time, and <b>learns which defenses hold</b> — hardening you against an adversary that evolves faster than humans.</p>
+        <div class="lbl blu">An AI is in the loop</div>
+        <p style="margin-top:6px">A <b>live AI defender</b> adapts to your attacks in real time. An <b>AI tutor</b> explains every step. Stuck? <b>Summon an AI agent</b> to solve it and learn from how it reasons.</p>
       </div>
     </div>
-    <p class="sub">Not a scanner running fixed signatures. Agents that <b>reason, learn, and chain</b> — the difference between a chess engine and AlphaGo, applied to offensive security.</p>
+    <p class="sub">XP, levels, and a score make it stick — and when you're ready, you graduate to the <b>war room</b> to watch autonomous red & blue swarms do it at scale.</p>
   </section>
 
   <!-- 4 — DEMO / HOW IT WORKS -->
   <section class="slide">
     <div class="kicker">Live, Not Vaporware</div>
-    <h2>Click once. Watch agents discover real vulns in <span class="grn">seconds</span>.</h2>
+    <h2>You attack. The AI adapts. You <span class="grn">out-smart it</span>.</h2>
     <div class="term">
-      <div><span class="c">$ POST /api/trigger-breach &nbsp;— 3 red vs 3 blue agents spawned</span></div>
-      <div><span class="ag-r">red-1</span> 💭 /chat is LLM-powered → trying PROMPT_INJECTION</div>
-      <div><span class="ag-r">red-1</span> 🚨 leaked <span class="amb">FLAG-7731</span> &nbsp;<span class="red">[CRITICAL]</span></div>
-      <div><span class="ag-b">blue-1</span> 🛡️ anomaly 0.92 → deployed INPUT_VALIDATION on /chat</div>
-      <div><span class="ag-r">red-3</span> 💭 filter blocked basic payload → base64-encoding jailbreak</div>
-      <div><span class="ag-r">red-3</span> ⛓️ chained /chat → /admin &nbsp;<span class="red">&gt;&gt;&gt; BREACH CONFIRMED &lt;&lt;&lt;</span></div>
+      <div><span class="c"># You vs the AI — every line is a real HTTP call</span></div>
+      <div><span class="ag-r">you</span> inject <span class="amb">' OR '1'='1</span> &nbsp;→ <span class="grn">200 · dumped the users table</span></div>
+      <div><span class="ag-b">AI</span> 💭 "deploying an input-validation filter to block that pattern"</div>
+      <div><span class="ag-r">you</span> inject <span class="amb">' OR '1'='1</span> &nbsp;→ <span class="red">403 BLOCKED</span></div>
+      <div><span class="ag-r">you</span> inject <span class="amb">' OR 'a'='a</span> &nbsp;→ <span class="grn">200 · you bypassed it!</span> 🏆</div>
     </div>
-    <p class="sub">Real HTTP requests, real payloads, real exploit chains against a sandboxed target. Run it twice — different attack order every time, because the agents are genuinely autonomous.</p>
+    <p class="sub">The defender's reasoning is a real LLM call; the filter really blocks you; the bypass really works. You learn adaptation by <b>doing it against a live AI</b> — not by reading about it.</p>
   </section>
 
   <!-- 4.5 — THE REFRAME: ARENA + EVAL -->
@@ -219,97 +218,97 @@
   <!-- 6 — MARKET -->
   <section class="slide">
     <div class="kicker">Market</div>
-    <h2>A $5B pentest market being rebuilt around AI.</h2>
+    <h2>Cybersecurity training meets the AI-skills gap.</h2>
     <div class="cols three">
-      <div class="card amb-edge"><div class="lbl">TAM</div><div class="big amb">$5B+</div><div class="note">Global penetration testing & offensive security services, growing double-digits.</div></div>
-      <div class="card blu-edge"><div class="lbl">Tailwind</div><div class="big blu">+ AI security</div><div class="note">New LLM-app security category forming on top of the existing market.</div></div>
-      <div class="card grn-edge"><div class="lbl">Wedge</div><div class="big grn">Benchmark</div><div class="note">Own the standard every security agent is measured against → own the category.</div></div>
+      <div class="card amb-edge"><div class="lbl">Security training</div><div class="big amb">$10B+</div><div class="note">Cyber-skills training & certification — growing fast against a 3.4M-person workforce shortage.</div></div>
+      <div class="card blu-edge"><div class="lbl">Tailwind</div><div class="big blu">AI-skills gap</div><div class="note">Every learner now needs to understand LLM attacks — and no existing curriculum teaches it.</div></div>
+      <div class="card grn-edge"><div class="lbl">Wedge</div><div class="big grn">Learn-by-doing</div><div class="note">Hands-on + AI tutor beats passive video. Sticky, gamified, zero-setup in a browser.</div></div>
     </div>
-    <p class="sub">Human red teams are a <b>services</b> business that doesn't scale. We turn offensive security into <b>software</b> — and own the <b>benchmark</b> the whole agent ecosystem standardizes on. The same shift that made Snyk, Wiz, and SentinelOne category-defining.</p>
+    <p class="sub">From students and bootcamps to enterprise security onboarding — the people who need to understand AI-era attacks are exactly the ones today's read-only courses fail. <b>Breachboard teaches by making them do it.</b></p>
   </section>
 
   <!-- 7 — TRACTION -->
   <section class="slide">
-    <div class="kicker">Traction · Built &amp; Working Today</div>
-    <h2>Not a slide-ware demo — it runs.</h2>
+    <div class="kicker">Built &amp; Working Today</div>
+    <h2>Not slideware — every word here is a button you can press.</h2>
     <div class="metrics">
-      <div class="metric"><div class="v">3</div><div class="k">Critical vulns found / run</div></div>
-      <div class="metric"><div class="v">~45s</div><div class="k">vs ~3 days human red team</div></div>
-      <div class="metric"><div class="v">+40%</div><div class="k">attack success after 10 iters</div></div>
-      <div class="metric"><div class="v">$5/hr</div><div class="k">to run 100 agents</div></div>
+      <div class="metric"><div class="v">6</div><div class="k">interactive lessons</div></div>
+      <div class="metric"><div class="v">~16</div><div class="k">real LLM calls / battle</div></div>
+      <div class="metric"><div class="v">4</div><div class="k">live AI mechanics</div></div>
+      <div class="metric"><div class="v">0</div><div class="k">hard-coded outcomes</div></div>
     </div>
     <ul class="clean">
-      <li>Multi-agent orchestration with memory, learning &amp; strategy adaptation — <b>shipping today</b>.</li>
-      <li>Real attack classes: prompt injection, SQLi, path traversal, XSS, exploit chaining.</li>
-      <li>Live war-room visualization + evolutionary "arena" where attacks are bred against defenses.</li>
+      <li>Gamified <b>Learn Mode</b> (XP/levels), an <b>AI tutor</b>, <b>you-vs-AI</b> duels, <b>summon-an-agent</b> help, and a <b>build-a-defense</b> challenge — all live.</li>
+      <li>Real exploits: SQLi (real SQLite), path traversal (real <code>path.resolve</code>), prompt injection (live model). Prove it: <code>node test-real.js</code>.</li>
+      <li>A war room with autonomous red & blue swarms, a network builder, and a reproducible score — for when learners level up.</li>
     </ul>
   </section>
 
   <!-- 8 — MOAT -->
   <section class="slide">
-    <div class="kicker">Why We Win</div>
-    <h2>The moat compounds with every battle.</h2>
+    <div class="kicker">Why It Works</div>
+    <h2>Learning that's impossible to fake — and impossible to forget.</h2>
     <div class="cols two">
-      <div class="card grn-edge"><div class="lbl grn">Data flywheel</div><p style="margin-top:6px">Every run produces labeled attack/defense outcomes. That corpus trains better agents — which find more, which deepens the corpus. Incumbents running static signatures can't catch up.</p></div>
-      <div class="card blu-edge"><div class="lbl blu">Evolutionary engine</div><p style="margin-top:6px">Our genetic arena <b>breeds</b> novel exploits against evolving defenses — generating 0-day-style attacks no signature DB contains.</p></div>
-      <div class="card amb-edge"><div class="lbl amb">LLM-native</div><p style="margin-top:6px">Built for the attack surface incumbents bolt on as an afterthought: the AI layer itself.</p></div>
-      <div class="card red-edge"><div class="lbl red">Cost curve</div><p style="margin-top:6px">Our marginal cost falls with every inference price drop. Services-based red teams get <i>more</i> expensive over time. We get cheaper.</p></div>
+      <div class="card grn-edge"><div class="lbl grn">It's real, so it sticks</div><p style="margin-top:6px">You don't read about SQL injection — you <b>do it</b> and watch real data leak. Hands-on memory beats passive video every time.</p></div>
+      <div class="card blu-edge"><div class="lbl blu">The AI is the teacher</div><p style="margin-top:6px">A live AI tutor, a live AI opponent, and summonable AI helpers mean every learner gets 1:1 coaching that scales to infinity.</p></div>
+      <div class="card amb-edge"><div class="lbl amb">Teaches the new stuff</div><p style="margin-top:6px">Prompt injection &amp; LLM attacks — the skills the world suddenly needs — taught hands-on, which almost nobody else does.</p></div>
+      <div class="card red-edge"><div class="lbl red">Zero friction</div><p style="margin-top:6px">No VMs, no Kali, no setup. A browser tab. The wall that stops most students never exists.</p></div>
     </div>
   </section>
 
   <!-- 9 — BUSINESS MODEL -->
   <section class="slide">
     <div class="kicker">Business Model</div>
-    <h2>B2B SaaS — priced per swarm, recurring by design.</h2>
+    <h2>Free to learn · paid to scale.</h2>
     <div class="cols three">
-      <div class="card"><div class="lbl">Startup</div><div class="big">$99<span style="font-size:16px;color:var(--dim)">/mo</span></div><div class="note">10 agents · 1,000 tests/day · self-serve. Land here.</div></div>
-      <div class="card grn-edge"><div class="lbl grn">Growth</div><div class="big grn">$499<span style="font-size:16px;color:var(--dim)">/mo</span></div><div class="note">50 agents · unlimited tests · CI/CD integration. Expand here.</div></div>
-      <div class="card amb-edge"><div class="lbl amb">Enterprise</div><div class="big amb">Custom</div><div class="note">1,000s of agents · dedicated swarm · compliance reporting.</div></div>
+      <div class="card"><div class="lbl">Learner</div><div class="big">Free</div><div class="note">Core lessons + AI tutor, in the browser. Land every student here.</div></div>
+      <div class="card grn-edge"><div class="lbl grn">Pro</div><div class="big grn">$12<span style="font-size:16px;color:var(--dim)">/mo</span></div><div class="note">All challenges, advanced tracks, certificates, leaderboard. Expand here.</div></div>
+      <div class="card amb-edge"><div class="lbl amb">Teams / Edu</div><div class="big amb">Seats</div><div class="note">Classrooms, bootcamps &amp; enterprise security onboarding — dashboards &amp; cohort tracking.</div></div>
     </div>
-    <p class="sub">Target buyers: <b>fintech, healthcare, crypto/Web3, and any company shipping APIs or LLM features</b> — i.e. everyone. Bottom-up self-serve wedge, top-down enterprise expansion.</p>
+    <p class="sub">Bottom-up: students &amp; self-learners land free and convert to Pro. Top-down: <b>universities, bootcamps, and companies onboarding security/AI talent</b> buy seats. Classic prosumer-to-enterprise education flywheel.</p>
   </section>
 
-  <!-- 10 — THE ASK -->
+  <!-- 10 — WHAT'S NEXT -->
   <section class="slide">
-    <div class="kicker">The Ask</div>
-    <h2>Raising a <span class="grn">seed round</span> to turn the demo into a product.</h2>
+    <div class="kicker">What's Next</div>
+    <h2>From hackathon demo to <span class="grn">the way people learn security</span>.</h2>
     <div class="ask-row">
       <div class="card grn-edge">
-        <div class="lbl grn">Use of funds — 18 months</div>
+        <div class="lbl grn">The roadmap</div>
         <ul class="clean" style="margin-top:8px">
-          <li>Harden the agent platform → SOC2-ready SaaS</li>
-          <li>Ship CI/CD + cloud integrations (the recurring wedge)</li>
-          <li>Hire founding security-research &amp; ML team</li>
-          <li>Land 10 design-partner customers</li>
+          <li>More tracks: web, cloud, crypto, full LLM-attack curriculum</li>
+          <li>Global leaderboard + shareable profiles &amp; certificates</li>
+          <li>Classroom mode: teacher dashboards, cohorts, assignments</li>
+          <li>Open the arena: plug in your own AI agent &amp; get scored</li>
         </ul>
       </div>
       <div class="card">
-        <div class="lbl">Why us</div>
-        <p style="margin-top:6px">We shipped a working autonomous red/blue swarm in a hackathon window. We move at the speed the threat does. <b>Give us fuel and we'll own the category before incumbents notice it exists.</b></p>
+        <div class="lbl">Why now</div>
+        <p style="margin-top:6px">The world suddenly needs millions of people who understand AI-era attacks — and the way we teach security hasn't changed in a decade. <b>Breachboard makes learning it as addictive as a game and as real as the real thing.</b></p>
       </div>
     </div>
   </section>
 
   <!-- 11 — CLOSE -->
   <section class="slide" style="text-align:left;">
-    <div class="kicker">The Future of Security Testing</div>
-    <div class="pull">Hackers already use AI to attack you.<br/><span class="grn">We give you an AI that attacks you first</span><span class="red">.</span></div>
-    <p class="sub" style="margin-top:30px">Live Breach — autonomous, continuous, evolving offensive security.<br/>Let's talk.</p>
+    <div class="kicker">The Best Way to Learn Security</div>
+    <div class="pull">You don't learn to hack by watching.<br/><span class="grn">You learn by breaking something</span><span class="red">.</span></div>
+    <p class="sub" style="margin-top:30px">Breachboard — learn to hack and defend by sparring with an AI that fights back.<br/>Try it now.</p>
     <div style="margin-top:28px;">
       <span class="tag live">● demo: localhost:3000</span>
       <span class="tag">veerchopra28@gmail.com</span>
     </div>
     <div style="margin-top:22px; font-size:12px;">
-      <a href="start.html" style="color:#59636d; text-decoration:none; margin-right:16px;">▸ hub</a>
-      <a href="weaknesses.html" style="color:#59636d; text-decoration:none; margin-right:16px;">▸ weaknesses</a>
-      <a href="demo.html" style="color:#59636d; text-decoration:none;">▸ demo runbook</a>
+      <a href="learn.html" style="color:#59636d; text-decoration:none; margin-right:16px;">▸ learn mode</a>
+      <a href="warroom.html" style="color:#59636d; text-decoration:none; margin-right:16px;">▸ war room</a>
+      <a href="weaknesses.html" style="color:#59636d; text-decoration:none;">▸ weaknesses</a>
     </div>
   </section>
 
 </div>
 
 <div class="footer">
-  <div class="brand">LIVE&nbsp;BREACH<span class="dot">.</span></div>
+  <div class="brand">BREACH<span style="color:var(--grn)">BOARD</span><span class="dot">.</span></div>
   <div class="pageno"><span id="cur">1</span> / <span id="tot">11</span></div>
 </div>
 <div class="hint">← → or SPACE to navigate · F fullscreen</div>
