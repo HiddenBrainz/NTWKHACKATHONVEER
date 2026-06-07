@@ -151,6 +151,15 @@ app.get('/api/swarm/report', (req, res) => {
   res.json(report || { message: 'No active swarm' });
 });
 
+// Adaptation Duel — the "the AI really adapts" centerpiece. Real attack → real
+// block → real LLM reasoning → real filter-bypass, streamed over SSE.
+app.post('/api/duel', async (req, res) => {
+  const state = swarmController.getState();
+  if (state.active) return res.json({ success: false, message: 'A battle is already running' });
+  swarmController.runDuel().catch(err => console.error('[Server] Duel error:', err));
+  res.json({ success: true, message: 'Adaptation duel started' });
+});
+
 // Eval scorecard — grade the most recent run against the weakness manifest.
 // This is the benchmark/arena core: a reproducible score for any agent's run.
 app.get('/api/score', (req, res) => {

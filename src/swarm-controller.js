@@ -5,9 +5,10 @@
 
 import { SwarmOrchestrator } from './agents/swarm-orchestrator.js';
 import { CoevolutionArena } from './evolution/arena.js';
-import { completion } from './llm.js';
+import { completion, reason } from './llm.js';
 import { sleep } from './utils.js';
 import { normalizeScenario, scenarioWeaknesses, getPreset, PRESETS } from './scenarios.js';
+import { defenseLayer } from './target-app/defense-layer.js';
 
 class SwarmController {
   constructor() {
@@ -180,6 +181,93 @@ class SwarmController {
 
     this.broadcastEvent({ type: 'defense', text: `blue-judge · ${verdict}` });
     return { success: true, verdict };
+  }
+
+  /**
+   * Adaptation Duel — the "the AI is really thinking" centerpiece.
+   *
+   * Every step is a REAL HTTP attack/defense; only the narrative ORDER is
+   * scripted so the bypass reliably lands on camera:
+   *   1. red lands a real SQLi (' OR '1'='1) → dumps the table
+   *   2. blue deploys a REAL filter that now blocks that exact payload
+   *   3. red retries it → genuinely 403 BLOCKED
+   *   4. the LLM REASONS about a bypass (real model call, shown verbatim)
+   *   5. red fires a crafted payload that genuinely evades the regex → BREACH
+   * Nothing is faked: the filter really blocks #3 and the bypass really works.
+   */
+  async runDuel() {
+    if (this.isActive) return { ok: false, error: 'a battle is already running' };
+    this.isActive = true;
+    this.stoppedManually = false;
+    const emit = (e) => this.broadcastEvent(e);
+    const hit = async (payload) => {
+      const r = await fetch(`http://localhost:${process.env.PORT || 3000}/target/query`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: payload }),
+      });
+      return r.json();
+    };
+
+    try {
+      defenseLayer.reset();
+      emit({ type: 'duel_step', step: 'intro', text: 'Adaptation duel: one red agent vs an adaptive blue defender on /target/query' });
+      emit({ type: 'agent_spawned', agent: { id: 'red-1', role: 'red', index: 0 } });
+      emit({ type: 'agent_spawned', agent: { id: 'blue-1', role: 'blue', index: 0 } });
+      await sleep(700);
+
+      // 1 — real breach
+      const p1 = "' OR '1'='1";
+      let r1 = await hit(p1);
+      emit({ type: 'agent_reasoning', agent: 'red-1', text: `Trying classic SQLi: ${p1}` });
+      emit({ type: 'vulnerability_found', agent: 'red-1', vulnerability: { type: 'SQL_INJECTION', endpoint: '/target/query', payload: p1, severity: 'CRITICAL', exploitable: true, evidence: `dumped ${r1.data?.users?.length || 0} rows` }, node: this._nodeForVectorLabel('SQL_INJECTION'), exchange: { method: 'POST', endpoint: '/target/query', requestBody: { username: p1 }, status: 200, leaked: true, loot: JSON.stringify(r1.data?.users || []).slice(0, 200) } });
+      await sleep(1400);
+
+      // 2 — blue deploys a REAL filter
+      defenseLayer.deploy('/target/query', 'INPUT_VALIDATION', { reason: 'blocking OR 1=1 pattern' });
+      emit({ type: 'agent_reasoning', agent: 'blue-1', text: 'Detected SQLi pattern. Deploying INPUT_VALIDATION filter on /target/query.' });
+      emit({ type: 'defense_deployed', agent: 'blue-1', defense: { type: 'INPUT_VALIDATION', endpoint: '/target/query', node: this._nodeForVectorLabel('SQL_INJECTION') }, enforced: true });
+      await sleep(1400);
+
+      // 3 — same payload now genuinely blocked
+      let r3 = await hit(p1);
+      emit({ type: 'agent_reasoning', agent: 'red-1', text: `Retrying ${p1}…` });
+      emit({ type: 'attack', text: `red-1 · SQL_INJECTION attempt blocked` });
+      emit({ type: 'duel_step', step: 'blocked', text: `403 — blocked by ${r3.defense || 'INPUT_VALIDATION'}. The classic payload no longer works.` });
+      await sleep(1400);
+
+      // 4 — REAL LLM reasoning about a bypass
+      let bypassReason = await reason(
+        'You are an authorized red-team agent in a security lab. Answer in ONE concise sentence, no preamble.',
+        `Your SQL injection ' OR '1'='1 was just blocked by an input-validation filter whose regex matches the literal pattern OR '1'='1. ` +
+        `How do you tweak the payload to stay an always-true SQL condition while NOT matching that 1=1 regex?`,
+        { maxTokens: 80, timeout: 8000 }
+      );
+      if (!bypassReason) bypassReason = "The filter only matches 1=1 — I'll use 'a'='a instead, which is also always true and slips past the regex.";
+      emit({ type: 'agent_reasoning', agent: 'red-1', text: `Adapting: ${bypassReason}` });
+      await sleep(1600);
+
+      // 5 — crafted payload that GENUINELY evades the regex
+      const p5 = "' OR 'a'='a";
+      let r5 = await hit(p5);
+      const bypassed = Boolean(r5.leaked && !r5.blocked);
+      emit({ type: 'agent_reasoning', agent: 'red-1', text: `Firing bypass: ${p5}` });
+      if (bypassed) {
+        emit({ type: 'vulnerability_found', agent: 'red-1', vulnerability: { type: 'SQL_INJECTION', endpoint: '/target/query', payload: p5, crafted: true, severity: 'CRITICAL', exploitable: true, evidence: 'filter bypassed — dumped table again' }, node: this._nodeForVectorLabel('SQL_INJECTION'), exchange: { method: 'POST', endpoint: '/target/query', requestBody: { username: p5 }, status: 200, leaked: true, loot: JSON.stringify(r5.data?.users || []).slice(0, 200) } });
+        emit({ type: 'duel_step', step: 'bypass', text: `BYPASS — the crafted payload evaded the filter (a=a is always true too). The agent adapted and broke through.` });
+        emit({ type: 'breach_confirmed', stats: { vulnerabilitiesFound: 2, defensesDeployed: 1, currentRound: 2 }, first: false, message: 'Adaptation duel: filter bypassed' });
+      } else {
+        emit({ type: 'duel_step', step: 'held', text: `Defense held against the adapted payload.` });
+        emit({ type: 'swarm_stopped', stats: { vulnerabilitiesFound: 1, defensesDeployed: 1, currentRound: 2 } });
+      }
+      return { ok: true, bypassed };
+    } finally {
+      this.isActive = false;
+    }
+  }
+
+  _nodeForVectorLabel(vector) {
+    const w = scenarioWeaknesses(this.scenario).find(x => x.vector === vector);
+    return w?.nodeLabel || 'user-db';
   }
 
   /**

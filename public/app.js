@@ -413,6 +413,7 @@ function runCommand(line) {
     case 'help': case '?':
       out(`${G}commands${RST}`);
       out(`  ${B}breach${RST}            launch the autonomous red vs blue agent swarm`);
+      out(`  ${B}duel${RST}              watch an agent get blocked, then ${BOLD}adapt & bypass${RST} (real LLM)`);
       out(`  ${B}inject${RST} <payload>  ${BOLD}YOU attack${RST} — fire a real payload at the live target`);
       out(`  ${B}examples${RST}          show ready-to-paste inject payloads`);
       out(`  ${B}status${RST}            show live battle stats`);
@@ -426,6 +427,7 @@ function runCommand(line) {
       break;
     case 'examples': case 'payloads': cmdExamples(); break;
     case 'breach': case 'attack': case 'start': cmdBreach(); break;
+    case 'duel': case 'adapt': cmdDuel(); break;
     case 'stop': case 'halt': cmdStop(); break;
     case 'reset': cmdReset(); break;
     case 'clear': case 'cls': cmdClear(); break;
@@ -469,6 +471,12 @@ function cmdBreach() {
   setRunning(true);
   out(`${Y}[user]${RST} launching breach sequence...`);
   fetch('/api/trigger-breach', { method: 'POST' }).catch(() => {});
+}
+function cmdDuel() {
+  if (triggerBtn.disabled) { out(`${Y}[!]${RST} a battle is already running`); return; }
+  setRunning(true);
+  out(`${B}[duel]${RST} ${BOLD}adaptation duel${RST} — watch an agent get blocked, then adapt + bypass...`);
+  fetch('/api/duel', { method: 'POST' }).catch(() => {});
 }
 function cmdStop() {
   if (stopBtn && stopBtn.disabled) { out(`${Y}[!]${RST} no battle running`); return; }
@@ -581,6 +589,15 @@ function handleEvent(ev) {
       // A new network was selected/built — re-render the whole map.
       renderScenario(ev.scenario);
       break;
+
+    case 'duel_step': {
+      // Narrative beats of the adaptation duel, rendered prominently.
+      const icon = ev.step === 'bypass' ? `${R}⚡` : ev.step === 'blocked' ? `${G}🛡` : ev.step === 'intro' ? `${B}⚔` : `${Y}▸`;
+      tw('');
+      tw(`  ${icon} ${BOLD}${ev.text}${RST}`);
+      if (ev.step === 'bypass') breachFinale();
+      break;
+    }
 
     case 'swarm_started':
       tw('');
@@ -776,6 +793,7 @@ function setupTabs() {
 }
 function setupControls() {
   triggerBtn.addEventListener('click', () => { cmdBreach(); term && term.focus(); });
+  document.getElementById('duelBtn')?.addEventListener('click', () => { cmdDuel(); term && term.focus(); });
   stopBtn && stopBtn.addEventListener('click', () => { cmdStop(); term && term.focus(); });
   resetBtn.addEventListener('click', () => { cmdReset(); term && term.focus(); });
 }
