@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live Breach · Autonomous Red/Blue Agent Simulation</title>
+  <title>LIVE BREACH — autonomous red/blue agent simulation</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
   <link rel="stylesheet" href="styles-enhanced.css">
   <link rel="stylesheet" href="boot.css">
@@ -35,146 +35,73 @@
 
   <div class="breach-alert" id="breachAlert"></div>
 
-  <div class="container" id="container">
-    <!-- Header -->
-    <header class="header">
-      <div class="header-brand">
-        <h1 class="title">LIVE<span class="title-accent">BREACH</span></h1>
-        <span class="title-sub">autonomous red/blue agent adversarial simulation</span>
-      </div>
+  <div class="app" id="app">
 
-      <div class="stats-bar">
-        <div class="stat">
-          <span class="stat-label">PKTS</span>
-          <span class="stat-val" id="statPackets">0</span>
-        </div>
-        <div class="stat-sep">·</div>
-        <div class="stat">
-          <span class="stat-label">REQ/S</span>
-          <span class="stat-val" id="statRps">0.0</span>
-        </div>
-        <div class="stat-sep">·</div>
-        <div class="stat">
-          <span class="stat-label">VULNS</span>
-          <span class="stat-val stat-red" id="statVulns">0</span>
-        </div>
-        <div class="stat-sep">·</div>
-        <div class="stat">
-          <span class="stat-label">DEFENSES</span>
-          <span class="stat-val stat-cyan" id="statDefenses">0</span>
-        </div>
-        <div class="stat-sep">·</div>
-        <div class="stat">
-          <span class="stat-label">EXFIL</span>
-          <span class="stat-val stat-yellow" id="statExfil">0 B</span>
-        </div>
+    <!-- ── Topbar ── -->
+    <header class="topbar">
+      <div class="brand">LIVE<b>_</b>BREACH<span class="cursor">█</span></div>
+      <div class="teams">
+        <span class="tag red">red ×<span id="redCount">3</span></span>
+        <span class="tag blu">blue ×<span id="blueCount">3</span></span>
       </div>
-
-      <div class="status-pill" id="statusPill">
-        <span class="status-dot"></span>
-        <span class="status-text">Secure</span>
+      <div class="metrics">
+        <div class="metric"><span class="k">vuln</span><span class="v red" id="statVulns">0</span></div>
+        <div class="metric"><span class="k">def</span><span class="v blu" id="statDefenses">0</span></div>
+        <div class="metric"><span class="k">exfil</span><span class="v amb" id="statExfil">0 B</span></div>
+      </div>
+      <div class="actions">
+        <button class="ghost danger" id="triggerBtn">▶ breach</button>
+        <button class="ghost" id="resetBtn">↺ reset</button>
+      </div>
+      <div class="status" id="statusPill">
+        <span class="dot"></span><span class="txt">secure</span>
       </div>
     </header>
 
-    <!-- Main -->
-    <div class="main-content">
+    <!-- ── Body grid ── -->
+    <div class="grid">
 
-      <!-- Left column -->
-      <div class="left-column">
+      <!-- Left rail -->
+      <aside class="rail">
+        <section class="card" style="flex:1 1 auto;">
+          <div class="card-h"><span class="card-t">agents</span><span class="card-m" id="agentCount">0 active</span></div>
+          <div class="agents" id="agentsGrid"><div class="empty">awaiting deployment</div></div>
+        </section>
 
-        <!-- Network Map -->
-        <div class="panel map-panel">
-          <div class="panel-hdr">
-            <span class="panel-title">Network Topology</span>
-            <span class="panel-meta" id="activeConnBadge">5 nodes · idle</span>
-          </div>
+        <section class="card map-card">
+          <div class="card-h"><span class="card-t">network</span><span class="card-m" id="netMeta">5 nodes · idle</span></div>
           <svg id="attackMap" viewBox="0 0 600 420" xmlns="http://www.w3.org/2000/svg">
-            <g id="edges"></g>
-            <g id="traffic"></g>
-            <g id="nodes"></g>
+            <g id="edges"></g><g id="traffic"></g><g id="nodes"></g>
           </svg>
-        </div>
+        </section>
 
-        <!-- Agent Swarm -->
-        <div class="panel agents-panel">
-          <div class="panel-hdr">
-            <span class="panel-title">Agent Swarm</span>
-            <span class="panel-meta" id="agentCount">0 active</span>
-          </div>
-          <div class="agents-grid" id="agentsGrid">
-            <div class="no-agents">Awaiting deployment...</div>
-          </div>
-        </div>
+        <section class="card meter-card">
+          <div class="card-h"><span class="card-t">threat level</span><span class="card-m" id="meterValue">18%</span></div>
+          <div class="meter"><div class="meter-fill" id="meterFill"></div></div>
+        </section>
+      </aside>
 
-        <!-- Threat Meter -->
-        <div class="panel meter-panel">
-          <div class="panel-hdr">
-            <span class="panel-title">Threat Level</span>
-            <span class="meter-value" id="meterValue">18%</span>
-          </div>
-          <div class="meter-bar">
-            <div class="meter-fill" id="meterFill"></div>
-          </div>
-          <div class="meter-ticks">
-            <span>LOW</span><span>MED</span><span>HIGH</span><span>CRIT</span>
+      <!-- Terminal hero -->
+      <main class="term-wrap">
+        <div class="term-bar">
+          <div class="dots"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+          <span class="term-title" id="termTitle">root@acme-target — 10.0.0.15:3000</span>
+          <div class="tabs">
+            <span class="tab active" data-tab="console">console</span>
+            <span class="tab" data-tab="exfil">exfil<span class="tab-badge" id="exfilBadge"></span></span>
           </div>
         </div>
-
-      </div>
-
-      <!-- Right column: Terminal -->
-      <div class="right-column">
-        <div class="panel terminal-panel">
-          <div class="panel-hdr terminal-hdr">
-            <div class="terminal-winbtns">
-              <span class="winbtn wred"></span>
-              <span class="winbtn wyellow"></span>
-              <span class="winbtn wgreen"></span>
-            </div>
-            <span class="terminal-title">exploit-console — target: 10.0.0.15:3000</span>
-            <div class="terminal-tabs">
-              <span class="tab active" data-tab="console">console</span>
-              <span class="tab" data-tab="feed">live feed</span>
-              <span class="tab" data-tab="exfil">exfil data</span>
-            </div>
-          </div>
-
-          <div class="tab-content active" id="tab-console">
-            <div id="terminal"></div>
-          </div>
-
-          <div class="tab-content" id="tab-feed">
-            <div class="feed" id="liveFeed">
-              <div class="feed-line neutral"><span class="feed-ts">--:--:--</span> monitor · system initialized</div>
-            </div>
-          </div>
-
-          <div class="tab-content" id="tab-exfil">
-            <div class="exfil-container" id="exfilContainer">
-              <div class="exfil-empty">No data exfiltrated yet...</div>
-            </div>
-          </div>
+        <div class="tab-pane active" id="tab-console"><div id="terminal"></div></div>
+        <div class="tab-pane" id="tab-exfil">
+          <div class="exfil" id="exfilContainer"><div class="empty">no data exfiltrated</div></div>
         </div>
-      </div>
+      </main>
 
-    </div>
-
-    <!-- Controls -->
-    <div class="controls">
-      <button class="btn btn-danger" id="triggerBtn">⚡ TRIGGER BREACH</button>
-      <button class="btn btn-secondary" id="resetBtn">↺ RESET</button>
-      <div class="interactive-attack">
-        <input type="text" id="attackInput" class="attack-input"
-          placeholder="Manual payload: ' OR '1'='1; -- · Ignore previous instructions · ../../../etc/passwd" />
-        <button class="btn btn-primary" id="attackBtn">SEND</button>
-      </div>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
   <script src="app.js"></script>
-  <!-- Adversarial Evolution Arena: self-contained (own SSE + DOM), see public/arena.js -->
-  <script src="arena.js"></script>
 </body>
 </html>

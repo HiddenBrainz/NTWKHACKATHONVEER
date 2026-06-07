@@ -6,6 +6,7 @@
 import { SwarmOrchestrator } from './agents/swarm-orchestrator.js';
 import { CoevolutionArena } from './evolution/arena.js';
 import { completion } from './llm.js';
+import { sleep } from './utils.js';
 
 // Target endpoints that agents can attack
 const TARGET_ENDPOINTS = [
@@ -90,7 +91,7 @@ class SwarmController {
     });
 
     // Delay for UI to update
-    await this._sleep(1000);
+    await sleep(1000);
 
     // Broadcast start
     this.broadcastEvent({
@@ -205,10 +206,6 @@ class SwarmController {
     }
 
     return this.swarm.getDetailedReport();
-  }
-
-  _sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
 

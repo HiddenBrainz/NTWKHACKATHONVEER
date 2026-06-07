@@ -20,8 +20,8 @@ import { GeneticEngine } from './genetic-engine.js';
 import { VectorFirewall } from '../defense/vector-firewall.js';
 import { evaluateVictim, victimProvider, synthesizeGene } from './victim.js';
 import { project } from '../embeddings.js';
+import { sleep } from '../utils.js';
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
 const clamp01 = x => Math.max(0, Math.min(1, x));
 
 // ELO helpers

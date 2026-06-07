@@ -7,6 +7,7 @@ import { RedAgent } from './red-agent.js';
 import { BlueAgent } from './blue-agent.js';
 import { completion } from '../llm.js';
 import { defenseLayer } from '../target-app/defense-layer.js';
+import { sleep } from '../utils.js';
 
 // Each attack vector has a natural target endpoint
 const ENDPOINT_BY_ATTACK = {
@@ -159,7 +160,7 @@ export class SwarmOrchestrator {
       await this._redReconnaissancePhase();
 
       // Small delay for visualization
-      await this._sleep(800);
+      await sleep(800);
 
       // Phase 2: Red team attacks
       const discoveredBefore = this.discoveries.length;
@@ -167,19 +168,19 @@ export class SwarmOrchestrator {
       const gained = this.discoveries.length - discoveredBefore;
 
       // Small delay
-      await this._sleep(600);
+      await sleep(600);
 
       // Phase 3: Blue team monitoring
       const threats = await this._blueMonitoringPhase(attacks);
 
       // Small delay
-      await this._sleep(600);
+      await sleep(600);
 
       // Phase 4: Blue team response (deploys real defenses into the layer)
       await this._blueResponsePhase(threats);
 
       // Small delay between rounds
-      await this._sleep(1000);
+      await sleep(1000);
 
       // Blue has neutralized red once a full round lands no new breaches
       if (gained === 0 && this.currentRound >= 2) {
@@ -226,7 +227,7 @@ export class SwarmOrchestrator {
         text: `Scanned ${findings.length} endpoints, prioritizing ${findings[0]?.endpoint || 'unknown'}`
       });
 
-      await this._sleep(400);
+      await sleep(400);
     }
   }
 
@@ -313,7 +314,7 @@ export class SwarmOrchestrator {
           });
         }
 
-        await this._sleep(500);
+        await sleep(500);
 
       } catch (error) {
         console.error(`[Swarm] Red agent ${agent.id} error:`, error);
@@ -358,7 +359,7 @@ export class SwarmOrchestrator {
         });
       }
 
-      await this._sleep(400);
+      await sleep(400);
     }
 
     return allThreats;
@@ -420,7 +421,7 @@ export class SwarmOrchestrator {
           });
         }
 
-        await this._sleep(500);
+        await sleep(500);
 
       } catch (error) {
         console.error(`[Swarm] Blue agent ${agent.id} error:`, error);
@@ -461,9 +462,5 @@ export class SwarmOrchestrator {
       redTeam: this.redTeam.map(a => a.getReport()),
       blueTeam: this.blueTeam.map(a => a.getReport())
     };
-  }
-
-  _sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
