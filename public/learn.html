@@ -71,12 +71,38 @@
   .tutor-ask input { flex: 1; font-family: inherit; background: var(--term); color: var(--txt); border: 1px solid var(--line-2); border-radius: 6px; padding: 8px 10px; font-size: 12px; }
   .tutor-ask button { font-family: inherit; font-weight: 800; font-size: 12px; background: transparent; color: var(--grn); border: 1px solid rgba(37,255,154,0.4); border-radius: 6px; padding: 0 12px; cursor: pointer; }
   .progress-pill { font-size: 11px; color: var(--dim); }
+
+  /* gamified HUD */
+  .hud { display: flex; align-items: center; gap: 12px; margin-left: 8px; }
+  .hud-level { display: flex; flex-direction: column; line-height: 1.1; }
+  .hud-lvl-num { font-size: 9px; color: var(--grn); font-weight: 800; letter-spacing: 1px; }
+  .hud-lvl-name { font-size: 11px; color: #fff; font-weight: 700; }
+  .hud-xpbar { width: 120px; height: 7px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
+  .hud-xpfill { height: 100%; background: linear-gradient(90deg, #25ff9a, #5cffb4); border-radius: 4px; transition: width .5s ease; box-shadow: 0 0 8px rgba(37,255,154,.5); }
+  .hud-xp { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .hud-score { font-size: 13px; color: var(--amb); font-weight: 800; font-variant-numeric: tabular-nums; }
+  @media (max-width: 760px) { .hud-xpbar, .hud-xp { display: none; } }
+
+  /* XP floating popup */
+  .xp-popup {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -40%) scale(.8);
+    z-index: 200; text-align: center; pointer-events: none; opacity: 0;
+    transition: all .4s cubic-bezier(.2,1.4,.4,1);
+    background: rgba(7,9,12,0.9); border: 1px solid rgba(37,255,154,.4);
+    border-radius: 14px; padding: 18px 32px; box-shadow: 0 12px 50px rgba(37,255,154,.2);
+  }
+  .xp-popup.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .xp-popup.levelup { border-color: var(--amb); box-shadow: 0 12px 50px rgba(255,194,75,.35); }
+  .xp-popup .xp-big { font-size: 34px; font-weight: 800; color: var(--grn); }
+  .xp-popup.levelup .xp-big { color: var(--amb); }
+  .xp-popup .xp-small { font-size: 12px; color: var(--dim); margin-top: 4px; }
 </style>
 </head>
 <body>
   <nav class="topnav">
     <span class="brand">LIVE&nbsp;BREACH<span class="dot">.</span></span>
-    <span style="color:var(--grn);font-size:11px;letter-spacing:2px;">LEARN MODE</span>
+    <span style="color:var(--grn);font-size:11px;letter-spacing:2px;">LEARN</span>
+    <div class="hud" id="hud"></div>
     <span class="spacer"></span>
     <span class="progress-pill" id="progressPill">0 / 5 complete</span>
     <a href="start.html">hub</a>

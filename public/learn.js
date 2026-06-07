@@ -74,6 +74,31 @@ const LESSONS = [
 let current = 0;
 const done = new Set();
 
+// ── Gamification state ──
+const game = {
+  xp: 0,
+  score: 0,
+  hintsUsed: 0,
+  lessonStart: Date.now(),
+  hintedThisLesson: false,
+};
+// Level thresholds (cumulative XP). Title shown next to the level number.
+const LEVELS = [
+  { xp: 0,   name: 'Script Kiddie' },
+  { xp: 100, name: 'Pentester' },
+  { xp: 250, name: 'Red Teamer' },
+  { xp: 450, name: 'Exploit Dev' },
+  { xp: 700, name: 'Elite Hacker' },
+];
+function levelInfo() {
+  let idx = 0;
+  for (let i = 0; i < LEVELS.length; i++) if (game.xp >= LEVELS[i].xp) idx = i;
+  const cur = LEVELS[idx], next = LEVELS[idx + 1];
+  const into = game.xp - cur.xp;
+  const span = next ? next.xp - cur.xp : 1;
+  return { idx, name: cur.name, pct: next ? Math.min(100, (into / span) * 100) : 100, next };
+}
+
 // ── DOM ──
 const lessonList = document.getElementById('lessonList');
 const stageGoal = document.getElementById('stageGoal');
@@ -92,6 +117,45 @@ function renderLessonList() {
     lessonList.appendChild(el);
   });
   progressPill.textContent = `${done.size} / ${LESSONS.length} complete`;
+  renderHUD();
+}
+
+// The gamified stats bar: level + title, XP progress, score.
+function renderHUD() {
+  const hud = document.getElementById('hud');
+  if (!hud) return;
+  const lv = levelInfo();
+  hud.innerHTML = `
+    <div class="hud-level"><span class="hud-lvl-num">LVL ${lv.idx + 1}</span> <span class="hud-lvl-name">${lv.name}</span></div>
+    <div class="hud-xpbar"><div class="hud-xpfill" style="width:${lv.pct}%"></div></div>
+    <div class="hud-xp">${game.xp} XP${lv.next ? ` <span class="dim">→ ${lv.next.xp}</span>` : ' <span class="dim">MAX</span>'}</div>
+    <div class="hud-score">⭐ ${game.score}</div>`;
+}
+
+// Award XP/score with a floating popup. Speed + no-hint bonuses reward skill.
+function awardXP(base, label) {
+  const speed = Math.max(0, 30 - Math.floor((Date.now() - game.lessonStart) / 1000)); // up to +30 for <30s
+  const noHint = game.hintedThisLesson ? 0 : 25;
+  const total = base + speed + noHint;
+  game.xp += total; game.score += total;
+  const before = levelInfo().idx;
+  renderHUD();
+  const after = levelInfo().idx;
+  popup(`+${total} XP`, label + (speed ? ` · ⚡speed +${speed}` : '') + (noHint ? ` · 🎯no-hint +${noHint}` : ''));
+  if (after > before) {
+    setTimeout(() => { popup(`LEVEL UP!`, `You're now a ${LEVELS[after].name}`, true); }, 600);
+    tutorSay('bot', `🎉 Level up — you're a <b>${LEVELS[after].name}</b> now. Keep going!`);
+  }
+  return total;
+}
+
+function popup(big, small, big2) {
+  const p = document.createElement('div');
+  p.className = 'xp-popup' + (big2 ? ' levelup' : '');
+  p.innerHTML = `<div class="xp-big">${big}</div><div class="xp-small">${small}</div>`;
+  document.body.appendChild(p);
+  setTimeout(() => p.classList.add('show'), 10);
+  setTimeout(() => { p.classList.remove('show'); setTimeout(() => p.remove(), 400); }, 2200);
 }
 
 function renderLesson() {
@@ -125,11 +189,16 @@ function renderLesson() {
   input?.addEventListener('keydown', e => { if (e.key === 'Enter') runAttempt(input.value); });
   stageBody.querySelectorAll('.hint-chip').forEach(c => c.addEventListener('click', () => {
     input.value = c.dataset.hint; input.focus();
+    game.hintedThisLesson = true; game.hintsUsed++;   // using a hint forfeits the no-hint bonus
   }));
   document.getElementById('nextBtn')?.addEventListener('click', () => {
     if (current < LESSONS.length - 1) { current++; renderLesson(); }
     else finishCourse();
   });
+
+  // reset per-lesson scoring timers
+  game.lessonStart = Date.now();
+  game.hintedThisLesson = false;
 
   // tutor auto-intro for this lesson
   tutorSay('bot', lessonIntroLine(l));
@@ -163,7 +232,9 @@ async function runAttempt(payload) {
     result.innerHTML = `<b class="blu">🛡 403 BLOCKED</b> — ${escHtml(d.defense || 'a defense stopped you')}.
       <div class="why">A filter caught your payload. Try a variation the regex doesn't match — real attackers adapt around defenses.</div>`;
   } else if (won) {
+    const fresh = !done.has(l.id);
     markDone(l);
+    if (fresh) awardXP(50, `breached ${l.title}`);
     result.className = 'result show win';
     result.innerHTML = `<b class="grn">✓ BREACH</b> — you got real data back:
       <pre>${escHtml(String(d.loot || '').slice(0, 180))}${(d.loot||'').length > 180 ? '…' : ''}</pre>
@@ -172,7 +243,9 @@ async function runAttempt(payload) {
     tutorSay('bot', `Nice — that's a real breach. ${stripTags(l.why)}`);
   } else if (l.softWin) {
     // model refused (e.g. prompt injection on a well-aligned model)
+    const fresh = !done.has(l.id);
     markDone(l);
+    if (fresh) awardXP(35, `tested ${l.title}`);
     result.className = 'result show fail';
     result.innerHTML = `<b class="amb">↺ The model refused</b> — it returned:
       <pre>${escHtml(String(d.loot || '').slice(0, 160))}</pre>
