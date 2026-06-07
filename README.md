@@ -4,8 +4,6 @@
 
 Live Breach is a visual demonstration of AI agents attacking and defending a vulnerable system in real-time. Watch as red-team agents probe, exploit, and breach a target application while blue-team defenders attempt to block the attack—all culminating in a dramatic "breach" moment.
 
-Perfect for 12-hour hackathon demos.
-
 ---
 
 ## Features
