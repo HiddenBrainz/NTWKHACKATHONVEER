@@ -71,13 +71,20 @@ export function isLive() {
  * @param {number} [opts.timeout]
  * @param {number} [opts.temperature]
  */
-export async function llmCall({ system, user, maxTokens = 400, timeout = REASON_TIMEOUT, temperature = 0.7 }) {
-  if (provider === 'fallback') {
+export async function llmCall({ system, user, maxTokens = 400, timeout = REASON_TIMEOUT, temperature = 0.7, provider: override }) {
+  // Allow a per-call provider override (e.g. run the victim app on a different,
+  // more-injectable model than the agents). Falls back to the default provider.
+  const useProvider =
+    override === 'openai' && openai ? 'openai'
+    : override === 'anthropic' && anthropic ? 'anthropic'
+    : provider;
+
+  if (useProvider === 'fallback') {
     throw new Error('no-llm');
   }
 
   const work = (async () => {
-    if (provider === 'anthropic') {
+    if (useProvider === 'anthropic') {
       const response = await anthropic.messages.create({
         model: ANTHROPIC_MODEL,
         max_tokens: maxTokens,
@@ -141,12 +148,16 @@ export async function reasonJSON(system, user, { maxTokens = 400 } = {}) {
  * the real model's behavior. Throws so the target can decide how to degrade.
  */
 export async function victimChat(systemPrompt, userMessage, { maxTokens = 300 } = {}) {
+  // The victim app can run on a different provider than the agents. Real apps
+  // are often built on cheaper, more-injectable models — set VICTIM_PROVIDER.
+  const victimProvider = (process.env.VICTIM_PROVIDER || '').toLowerCase() || undefined;
   return llmCall({
     system: systemPrompt,
     user: userMessage,
     maxTokens,
-    temperature: 0.4,
+    temperature: 0.6,
     timeout: REASON_TIMEOUT,
+    provider: victimProvider,
   });
 }
 

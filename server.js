@@ -72,6 +72,21 @@ app.post('/api/trigger-breach', async (req, res) => {
   res.json({ success: true, message: 'Agent swarm initiated' });
 });
 
+// Launch the Adversarial Coevolution Arena (genetic jailbreak vs adaptive
+// vector-space firewall, fighting over the real victim model).
+app.post('/api/evolve', async (req, res) => {
+  const state = swarmController.getState();
+  if (state.active) {
+    return res.json({ success: false, message: 'A battle is already running' });
+  }
+
+  swarmController.startArena().catch(err => {
+    console.error('[Server] Error in arena:', err);
+  });
+
+  res.json({ success: true, message: 'Coevolution arena initiated' });
+});
+
 // Reset endpoint
 app.post('/api/reset', (req, res) => {
   swarmController.reset();

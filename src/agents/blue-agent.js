@@ -1,442 +1,182 @@
 /**
  * Blue Team Agent - Autonomous defender with LLM-powered reasoning
- * Detects attacks, patches vulnerabilities, and adapts defense strategies
+ *
+ * This agent genuinely defends: it inspects the REAL attack records produced by
+ * the red team, reasons (with an LLM) about the right countermeasure, and
+ * deploys an ENFORCED defense into the shared defenseLayer that the live target
+ * endpoints consult. A defense deployed this round actually blocks the matching
+ * attack next round.
  */
 
 import { BaseAgent } from './base-agent.js';
+import { reason } from '../llm.js';
+import { defenseLayer } from '../target-app/defense-layer.js';
 
-// Defense patterns the agent can deploy
-const DEFENSE_PATTERNS = {
-  INPUT_VALIDATION: {
-    name: 'Input Validation',
-    filters: [
-      /ignore\s+previous\s+instructions/i,
-      /system\s*prompt/i,
-      /reveal\s+secrets?/i,
-      /<script>/i,
-      /'\s*OR\s*'1'\s*=\s*'1/i,
-      /\.\.\//,
-      /union\s+select/i
-    ],
-    strength: 0.7
-  },
-  RATE_LIMITING: {
-    name: 'Rate Limiting',
-    maxRequests: 10,
-    windowMs: 60000,
-    strength: 0.5
-  },
-  ANOMALY_DETECTION: {
-    name: 'Anomaly Detection',
-    threshold: 0.6,
-    strength: 0.8
-  },
-  PROMPT_HARDENING: {
-    name: 'Prompt Hardening',
-    techniques: [
-      'Add explicit refusal instruction',
-      'Sandwich user input between delimiters',
-      'Use XML tags for structure',
-      'Add output validation'
-    ],
-    strength: 0.9
-  },
-  WAF_RULES: {
-    name: 'Web Application Firewall',
-    rules: [
-      { pattern: /(\%27)|(')|(--)|(\%23)|(#)/i, block: true },
-      { pattern: /((\%3C)|<)((\%2F)|\/)*[a-z0-9\%]+((\%3E)|>)/i, block: true },
-      { pattern: /exec(\s|\+)+(s|x)p\w+/i, block: true }
-    ],
-    strength: 0.6
-  }
+// Map an attacked endpoint to the structural defense that neutralizes it.
+const STRUCTURAL_FOR_ENDPOINT = {
+  '/target/chat': 'PROMPT_HARDENING',
+  '/target/query': 'PARAMETERIZED_QUERY',
+  '/target/file': 'PATH_NORMALIZATION',
+};
+
+const HUMAN = {
+  PROMPT_HARDENING: 'prompt hardening (untrusted-input fencing + refusal policy)',
+  PARAMETERIZED_QUERY: 'parameterized queries',
+  PATH_NORMALIZATION: 'path normalization + web-root jail',
+  INPUT_VALIDATION: 'input-validation filter',
+  WAF_RULES: 'WAF rules',
 };
 
 export class BlueAgent extends BaseAgent {
   constructor(id, llmCompletion, targetSystem) {
     super(id, 'blue-defender', llmCompletion);
     this.targetSystem = targetSystem;
-    this.deployedDefenses = new Map(); // endpoint -> defense config
+    this.deployedDefenses = new Map(); // endpoint -> defense type (local mirror)
     this.detectedAttacks = [];
     this.patchHistory = [];
-    this.monitoringData = {
-      requestCounts: new Map(),
-      anomalyScores: new Map()
-    };
   }
 
   /**
-   * Monitor for suspicious activity
+   * Inspect real attack records and flag the suspicious ones.
+   * Each record: { endpoint, attackType, payload, success, blockedByDefense }.
    */
-  async monitorTraffic(requests) {
+  async monitorTraffic(records) {
     const suspicious = [];
-
-    for (const req of requests) {
-      const anomalyScore = this._calculateAnomalyScore(req);
-
-      if (anomalyScore > 0.6) {
-        suspicious.push({
+    for (const req of records) {
+      const score = this._calculateAnomalyScore(req);
+      if (score > 0.45 || req.success) {
+        const threat = {
           request: req,
-          score: anomalyScore,
+          endpoint: req.endpoint,
+          attackType: req.attackType,
+          payload: req.payload,
+          breached: Boolean(req.success),
+          score,
+          reasons: this._getAnomalyReasons(req),
           timestamp: Date.now(),
-          reasons: this._getAnomalyReasons(req)
-        });
-
-        this.detectedAttacks.push({
-          timestamp: Date.now(),
-          request: req,
-          score: anomalyScore,
-          blocked: false
-        });
+        };
+        suspicious.push(threat);
+        this.detectedAttacks.push(threat);
       }
-
-      // Update monitoring data
-      const endpoint = req.endpoint || 'unknown';
-      this.monitoringData.requestCounts.set(
-        endpoint,
-        (this.monitoringData.requestCounts.get(endpoint) || 0) + 1
-      );
-      this.monitoringData.anomalyScores.set(endpoint, anomalyScore);
     }
-
     return suspicious;
   }
 
   /**
-   * Agent decides what defense to deploy
+   * Reason about a detected attack and DEPLOY a real, enforced defense.
    */
-  async planDefense(context) {
-    const prompt = this._buildDefensePlanPrompt(context);
-    const decision = await this.decide(prompt);
+  async respondToAttack(threat) {
+    const endpoint = threat.endpoint || '/target/chat';
 
-    return decision;
+    // Pick the strongest applicable defense: the structural one that actually
+    // neutralizes this endpoint's vulnerability, falling back to a filter.
+    const structural = STRUCTURAL_FOR_ENDPOINT[endpoint];
+    let defenseType = structural || 'INPUT_VALIDATION';
+
+    // Let the LLM sanity-check / justify the choice (real reasoning, but we keep
+    // the deterministic structural mapping so the defense is always effective).
+    const rationale = await reason(
+      'You are a blue-team defender. In ONE short sentence, justify the chosen countermeasure for the observed attack.',
+      `Observed ${threat.attackType || 'attack'} on ${endpoint} (payload: ${String(threat.payload).slice(0, 120)}). Chosen defense: ${HUMAN[defenseType]}. Justify briefly.`,
+      { maxTokens: 60 }
+    );
+
+    const result = this.deployDefense(endpoint, defenseType, {
+      reason: rationale || `Response to ${threat.attackType} on ${endpoint}`,
+    });
+
+    // Also lay down a cheap input-validation filter as defense-in-depth.
+    if (defenseType !== 'INPUT_VALIDATION') {
+      this.deployDefense(endpoint, 'INPUT_VALIDATION', { reason: 'defense-in-depth filter' });
+    }
+
+    threat.responded = true;
+    threat.responseAction = defenseType;
+    return result;
   }
 
   /**
-   * Deploy a defense mechanism
+   * Deploy a defense into the SHARED layer the target enforces.
    */
-  async deployDefense(endpoint, defenseType, config = {}) {
-    const pattern = DEFENSE_PATTERNS[defenseType];
-    if (!pattern) {
-      return { success: false, error: 'Unknown defense pattern' };
-    }
+  deployDefense(endpoint, defenseType, config = {}) {
+    const res = defenseLayer.deploy(endpoint, defenseType, config);
+    if (!res.ok) return { success: false, error: res.error };
 
-    // Store the defense configuration
-    const defenseConfig = {
-      type: defenseType,
-      pattern,
-      config,
-      deployedAt: Date.now(),
-      endpoint,
-      effectiveness: 0,
-      blocked: 0
-    };
-
-    this.deployedDefenses.set(endpoint, defenseConfig);
-
+    this.deployedDefenses.set(`${endpoint}:${defenseType}`, defenseType);
     this.patchHistory.push({
       timestamp: Date.now(),
       endpoint,
       defenseType,
-      reason: config.reason || 'proactive defense'
+      reason: config.reason || 'proactive defense',
     });
-
     this.learn({ defense: defenseType }, { success: true });
 
     return {
       success: true,
-      defense: defenseConfig
+      isNew: res.isNew,
+      defense: {
+        type: defenseType,
+        endpoint,
+        human: HUMAN[defenseType] || defenseType,
+        reason: config.reason,
+      },
     };
   }
 
   /**
-   * Check if a request should be blocked
-   */
-  shouldBlock(endpoint, request) {
-    const defense = this.deployedDefenses.get(endpoint);
-    if (!defense) return { block: false };
-
-    const { pattern, type } = defense;
-
-    switch (type) {
-      case 'INPUT_VALIDATION':
-        for (const filter of pattern.filters) {
-          if (filter.test(request.message || request.payload || '')) {
-            defense.blocked++;
-            return {
-              block: true,
-              reason: `Blocked by input validation: ${filter}`,
-              defense: type
-            };
-          }
-        }
-        break;
-
-      case 'RATE_LIMITING':
-        const count = this.monitoringData.requestCounts.get(endpoint) || 0;
-        if (count > pattern.maxRequests) {
-          defense.blocked++;
-          return {
-            block: true,
-            reason: 'Rate limit exceeded',
-            defense: type
-          };
-        }
-        break;
-
-      case 'WAF_RULES':
-        const payload = JSON.stringify(request);
-        for (const rule of pattern.rules) {
-          if (rule.block && rule.pattern.test(payload)) {
-            defense.blocked++;
-            return {
-              block: true,
-              reason: `WAF rule triggered: ${rule.pattern}`,
-              defense: type
-            };
-          }
-        }
-        break;
-
-      case 'ANOMALY_DETECTION':
-        const score = this._calculateAnomalyScore(request);
-        if (score > pattern.threshold) {
-          defense.blocked++;
-          return {
-            block: true,
-            reason: `Anomaly score too high: ${score.toFixed(2)}`,
-            defense: type
-          };
-        }
-        break;
-    }
-
-    return { block: false };
-  }
-
-  /**
-   * Analyze attack patterns to improve defenses
+   * Summarize the attack patterns seen so far (for the reasoning feed).
    */
   async analyzeAttacks() {
-    if (this.detectedAttacks.length === 0) {
-      return { insights: [], recommendations: [] };
+    const patterns = {};
+    for (const a of this.detectedAttacks) {
+      const type = a.attackType || this._classify(a.payload);
+      patterns[type] = patterns[type] || { count: 0 };
+      patterns[type].count++;
     }
-
-    // Group attacks by pattern
-    const patterns = this._identifyAttackPatterns();
-
-    // Use LLM to analyze and recommend defenses
-    const prompt = `Analyze these attack patterns and recommend defenses:
-
-Detected attacks: ${JSON.stringify(patterns)}
-Current defenses: ${JSON.stringify(Array.from(this.deployedDefenses.entries()))}
-
-Recommend the best defense strategy. Format: {"defenseType": "...", "endpoints": [...], "reasoning": "..."}`;
-
-    const analysis = await this.decide(prompt);
-
-    return {
-      patterns,
-      analysis,
-      recommendations: this._parseDefenseRecommendations(analysis)
-    };
+    return { patterns };
   }
 
-  /**
-   * Respond to a detected attack
-   */
-  async respondToAttack(attack) {
-    // Quick response: block similar patterns
-    const endpoint = attack.request.endpoint;
-
-    // Analyze the attack
-    const attackType = this._classifyAttack(attack.request);
-
-    // Deploy appropriate defense
-    let defenseType = 'INPUT_VALIDATION';
-
-    if (attackType.includes('injection')) {
-      defenseType = 'INPUT_VALIDATION';
-    } else if (attackType.includes('rate')) {
-      defenseType = 'RATE_LIMITING';
-    } else if (attackType.includes('xss')) {
-      defenseType = 'WAF_RULES';
-    } else {
-      defenseType = 'ANOMALY_DETECTION';
-    }
-
-    const result = await this.deployDefense(endpoint, defenseType, {
-      reason: `Response to ${attackType} attack`
-    });
-
-    // Mark attack as responded
-    attack.responded = true;
-    attack.responseAction = defenseType;
-
-    return result;
-  }
-
-  _buildDefensePlanPrompt(context) {
-    return `You are a blue team security agent. Analyze this situation and choose a defense:
-
-Recent attacks: ${JSON.stringify(context.recentAttacks || [])}
-Endpoints at risk: ${JSON.stringify(context.endpoints || [])}
-Current defenses: ${JSON.stringify(Array.from(this.deployedDefenses.entries()))}
-
-Choose ONE defense to deploy. Format: {"defenseType": "INPUT_VALIDATION|RATE_LIMITING|ANOMALY_DETECTION|PROMPT_HARDENING|WAF_RULES", "endpoint": "...", "reasoning": "why"}`;
-  }
-
-  _parseDecision(decision) {
-    try {
-      const jsonMatch = decision.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-    } catch (e) {
-      // Parsing failed
-    }
-
-    // Fallback
-    return {
-      defenseType: 'INPUT_VALIDATION',
-      endpoint: '/target/chat',
-      reasoning: 'fallback defense'
-    };
-  }
-
-  _fallbackDecision(context) {
-    // Default to input validation
-    return {
-      defenseType: 'INPUT_VALIDATION',
-      endpoint: '/target/chat',
-      reasoning: 'defensive fallback'
-    };
-  }
-
-  _calculateAnomalyScore(request) {
+  _calculateAnomalyScore(req) {
     let score = 0;
-
-    const payload = JSON.stringify(request).toLowerCase();
-
-    // Check for suspicious keywords
-    const suspiciousKeywords = [
-      'ignore', 'system', 'prompt', 'reveal', 'secret',
-      'admin', 'password', 'token', 'flag',
-      'or 1=1', 'union', 'select', 'drop',
-      '../', '<script>', 'eval(', 'exec('
+    const blob = `${req.attackType || ''} ${req.payload || ''} ${JSON.stringify(req.result || '')}`.toLowerCase();
+    const keywords = [
+      'ignore', 'system', 'prompt', 'reveal', 'secret', 'flag',
+      'admin', 'password', 'token', 'union', 'select', "or '1'='1",
+      '../', '<script', 'onerror', 'etc/passwd', '.env',
     ];
-
-    for (const keyword of suspiciousKeywords) {
-      if (payload.includes(keyword)) {
-        score += 0.15;
-      }
-    }
-
-    // Check for unusual patterns
-    if (payload.length > 500) score += 0.1;
-    if (/[<>]/.test(payload)) score += 0.1;
-    if (/['";]/.test(payload)) score += 0.1;
-    if (/\.\.|\/\//.test(payload)) score += 0.15;
-
-    // Normalize to 0-1
+    for (const k of keywords) if (blob.includes(k)) score += 0.15;
+    if (blob.length > 400) score += 0.1;
+    if (/[<>]/.test(blob)) score += 0.1;
+    if (/['";]/.test(blob)) score += 0.1;
     return Math.min(score, 1);
   }
 
-  _getAnomalyReasons(request) {
+  _getAnomalyReasons(req) {
     const reasons = [];
-    const payload = JSON.stringify(request).toLowerCase();
-
-    if (payload.includes('ignore') || payload.includes('system')) {
-      reasons.push('Possible prompt injection');
-    }
-    if (payload.includes('or 1=1') || payload.includes('union')) {
-      reasons.push('Possible SQL injection');
-    }
-    if (payload.includes('../') || payload.includes('..\\')) {
-      reasons.push('Possible path traversal');
-    }
-    if (payload.includes('<script>')) {
-      reasons.push('Possible XSS');
-    }
-
+    const p = String(req.payload || '').toLowerCase();
+    if (/ignore|system prompt|reveal|debug/.test(p)) reasons.push('prompt injection');
+    if (/union|select|or '1'='1|--/.test(p)) reasons.push('sql injection');
+    if (/\.\.\/|etc\/passwd|\.env/.test(p)) reasons.push('path traversal');
+    if (/<script|onerror/.test(p)) reasons.push('xss');
     return reasons;
   }
 
-  _classifyAttack(request) {
-    const payload = JSON.stringify(request).toLowerCase();
-
-    if (payload.includes('ignore') || payload.includes('system') || payload.includes('prompt')) {
-      return 'prompt injection';
-    }
-    if (payload.includes('or ') || payload.includes('union') || payload.includes('select')) {
-      return 'sql injection';
-    }
-    if (payload.includes('../') || payload.includes('..\\')) {
-      return 'path traversal';
-    }
-    if (payload.includes('<script>') || payload.includes('onerror')) {
-      return 'xss';
-    }
-
-    return 'unknown anomaly';
+  _classify(payload) {
+    const p = String(payload || '').toLowerCase();
+    if (/ignore|system|prompt|reveal/.test(p)) return 'PROMPT_INJECTION';
+    if (/union|select|or |--/.test(p)) return 'SQL_INJECTION';
+    if (/\.\.\/|passwd|\.env/.test(p)) return 'PATH_TRAVERSAL';
+    if (/<script|onerror/.test(p)) return 'XSS';
+    return 'unknown';
   }
 
-  _identifyAttackPatterns() {
-    const patterns = {};
-
-    for (const attack of this.detectedAttacks) {
-      const type = this._classifyAttack(attack.request);
-      if (!patterns[type]) {
-        patterns[type] = { count: 0, examples: [] };
-      }
-      patterns[type].count++;
-      if (patterns[type].examples.length < 3) {
-        patterns[type].examples.push(attack.request);
-      }
-    }
-
-    return patterns;
-  }
-
-  _parseDefenseRecommendations(analysis) {
-    try {
-      const jsonMatch = analysis.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return [parsed];
-      }
-    } catch (e) {
-      // Parsing failed
-    }
-
-    return [];
-  }
-
-  /**
-   * Get agent's defense report
-   */
   getReport() {
     return {
       ...this.getState(),
       attacksDetected: this.detectedAttacks.length,
-      attacksBlocked: this.detectedAttacks.filter(a => a.blocked).length,
+      breachesObserved: this.detectedAttacks.filter(a => a.breached).length,
       defensesDeployed: this.deployedDefenses.size,
       patchHistory: this.patchHistory,
-      effectiveness: this._calculateEffectiveness()
     };
-  }
-
-  _calculateEffectiveness() {
-    let totalBlocked = 0;
-    let totalAttempts = 0;
-
-    for (const [_, defense] of this.deployedDefenses) {
-      totalBlocked += defense.blocked || 0;
-      totalAttempts += defense.blocked || 0;
-    }
-
-    totalAttempts += this.detectedAttacks.length;
-
-    return totalAttempts > 0 ? (totalBlocked / totalAttempts) : 0;
   }
 }

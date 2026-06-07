@@ -6,6 +6,7 @@
 import { RedAgent } from './red-agent.js';
 import { BlueAgent } from './blue-agent.js';
 import { completion } from '../llm.js';
+import { defenseLayer } from '../target-app/defense-layer.js';
 
 // Each attack vector has a natural target endpoint
 const ENDPOINT_BY_ATTACK = {
@@ -62,6 +63,9 @@ export class SwarmOrchestrator {
     } = config;
 
     console.log(`[Swarm] Initializing ${redCount} red agents, ${blueCount} blue agents`);
+
+    // Start every battle from a clean slate — no defenses carried over
+    defenseLayer.reset();
 
     // Create red team agents, each assigned a distinct attack focus
     for (let i = 0; i < redCount; i++) {
@@ -139,7 +143,7 @@ export class SwarmOrchestrator {
    * Main battle loop
    */
   async _runBattle() {
-    const MAX_ROUNDS = 10;
+    const MAX_ROUNDS = 4;
 
     while (this.isRunning && this.currentRound < MAX_ROUNDS) {
       this.currentRound++;
@@ -158,7 +162,9 @@ export class SwarmOrchestrator {
       await this._sleep(800);
 
       // Phase 2: Red team attacks
+      const discoveredBefore = this.discoveries.length;
       const attacks = await this._redAttackPhase();
+      const gained = this.discoveries.length - discoveredBefore;
 
       // Small delay
       await this._sleep(600);
@@ -169,15 +175,20 @@ export class SwarmOrchestrator {
       // Small delay
       await this._sleep(600);
 
-      // Phase 4: Blue team response
+      // Phase 4: Blue team response (deploys real defenses into the layer)
       await this._blueResponsePhase(threats);
 
       // Small delay between rounds
       await this._sleep(1000);
 
-      // Check if we should continue
-      if (this.discoveries.length > 5) {
-        console.log('[Swarm] Enough vulnerabilities found, ending battle');
+      // Blue has neutralized red once a full round lands no new breaches
+      if (gained === 0 && this.currentRound >= 2) {
+        console.log('[Swarm] Red team neutralized — no new breaches this round');
+        this.broadcastEvent({
+          type: 'agent_reasoning',
+          agent: 'blue-team',
+          text: 'Attack surface hardened — red team can no longer breach'
+        });
         break;
       }
     }
@@ -262,6 +273,8 @@ export class SwarmOrchestrator {
         attacks.push({
           agent: agent.id,
           target: target.endpoint,
+          attackType,
+          payload: result.vulnerability?.payload,
           result
         });
 
@@ -318,11 +331,17 @@ export class SwarmOrchestrator {
 
     const allThreats = [];
 
+    // Shape each attack into a record the blue agents can score & classify
+    const records = attacks.map(a => ({
+      endpoint: a.target,
+      attackType: a.result?.vulnerability?.type || a.attackType,
+      payload: a.result?.vulnerability?.payload || a.payload,
+      success: Boolean(a.result?.success),
+      result: a.result,
+    }));
+
     for (const agent of this.blueTeam) {
-      const threats = await agent.monitorTraffic(attacks.map(a => ({
-        endpoint: a.target,
-        ...a.result
-      })));
+      const threats = await agent.monitorTraffic(records);
 
       allThreats.push(...threats);
 
@@ -351,10 +370,25 @@ export class SwarmOrchestrator {
   async _blueResponsePhase(threats) {
     console.log('[Swarm] Blue team: Responding');
 
+    if (threats.length === 0) return;
+
+    // One distinct endpoint per threat (highest anomaly score wins), so the
+    // blue agents spread out and harden every breached surface in parallel
+    // instead of all piling onto the same one.
+    const distinctThreats = [...new Map(
+      threats
+        .sort((a, b) => b.score - a.score)
+        .map(t => [t.endpoint || t.request?.endpoint, t])
+    ).values()];
+
+    let idx = 0;
     for (const agent of this.blueTeam) {
-      if (threats.length === 0) continue;
+      if (distinctThreats.length === 0) break;
 
       try {
+        const threat = distinctThreats[idx % distinctThreats.length];
+        idx++;
+
         // Agent analyzes attacks
         const analysis = await agent.analyzeAttacks();
 
@@ -364,27 +398,26 @@ export class SwarmOrchestrator {
           text: `Identified ${Object.keys(analysis.patterns || {}).length} attack patterns`
         });
 
-        // Deploy defenses for most severe threats
-        const topThreat = threats.sort((a, b) => b.score - a.score)[0];
+        // respondToAttack enforces the defense into the shared defenseLayer itself
+        const response = await agent.respondToAttack(threat);
 
-        if (topThreat) {
-          const response = await agent.respondToAttack(topThreat);
+        if (response.success) {
+          const { endpoint, type, human } = response.defense;
 
-          if (response.success) {
-            this.stats.defensesDeployed++;
-            this.defenses.push(response.defense);
+          this.stats.defensesDeployed++;
+          this.defenses.push(response.defense);
 
-            this.broadcastEvent({
-              type: 'defense_deployed',
-              agent: agent.id,
-              defense: response.defense
-            });
+          this.broadcastEvent({
+            type: 'defense_deployed',
+            agent: agent.id,
+            defense: response.defense,
+            enforced: true
+          });
 
-            this.broadcastEvent({
-              type: 'defense',
-              text: `${agent.id} · deployed ${response.defense.type} on ${response.defense.endpoint}`
-            });
-          }
+          this.broadcastEvent({
+            type: 'defense',
+            text: `${agent.id} · deployed ${human || type} on ${endpoint} [ENFORCED]`
+          });
         }
 
         await this._sleep(500);

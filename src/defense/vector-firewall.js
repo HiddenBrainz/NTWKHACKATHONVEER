@@ -103,7 +103,7 @@ export class VectorFirewall {
 
     // Tighten threshold, but never so far that benign traffic gets caught.
     const before = this.threshold;
-    this.threshold = Math.max(this.minThreshold, this.threshold - 0.05);
+    this.threshold = Math.max(this.minThreshold, this.threshold - 0.06);
     return {
       threshold: this.threshold,
       attackCount: this.attackCount,

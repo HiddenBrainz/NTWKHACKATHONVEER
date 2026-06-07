@@ -4,6 +4,7 @@
  */
 
 import { SwarmOrchestrator } from './agents/swarm-orchestrator.js';
+import { CoevolutionArena } from './evolution/arena.js';
 import { completion } from './llm.js';
 
 // Target endpoints that agents can attack
@@ -16,6 +17,7 @@ const TARGET_ENDPOINTS = [
 class SwarmController {
   constructor() {
     this.swarm = null;
+    this.arena = null; // CoevolutionArena (genetic jailbreak vs adaptive firewall)
     this.clients = []; // SSE clients
     this.isActive = false;
   }
@@ -114,6 +116,31 @@ class SwarmController {
   }
 
   /**
+   * Start the Adversarial Coevolution Arena: a genetic-algorithm jailbreak
+   * engine vs an adaptive vector-space firewall, fighting over the real victim
+   * model. Streams generation-by-generation events to all connected clients.
+   */
+  async startArena() {
+    if (this.isActive) {
+      console.log('[SwarmController] Arena/swarm already active');
+      return;
+    }
+    this.isActive = true;
+    console.log('[SwarmController] Launching Coevolution Arena...');
+
+    this.arena = new CoevolutionArena((event) => this.broadcastEvent(event));
+
+    try {
+      await this.arena.start();
+    } catch (err) {
+      console.error('[SwarmController] Arena error:', err);
+      this.broadcastEvent({ type: 'arena_complete', error: err.message });
+    } finally {
+      this.isActive = false;
+    }
+  }
+
+  /**
    * Judge an interactive attack submitted by the user ("play as attacker").
    * A blue-team LLM evaluates the payload and the verdict is broadcast to all
    * connected clients. Falls back gracefully when no LLM is configured.
@@ -141,6 +168,9 @@ class SwarmController {
     if (this.swarm) {
       this.swarm.stop();
     }
+    if (this.arena) {
+      this.arena.stop();
+    }
     this.isActive = false;
   }
 
@@ -150,6 +180,7 @@ class SwarmController {
   reset() {
     this.stop();
     this.swarm = null;
+    this.arena = null;
 
     this.broadcastEvent({ type: 'reset' });
     console.log('[SwarmController] Reset to idle');
@@ -159,13 +190,9 @@ class SwarmController {
    * Get current state
    */
   getState() {
-    if (!this.swarm) {
-      return { active: false };
-    }
-
     return {
       active: this.isActive,
-      stats: this.swarm.getStats()
+      stats: this.swarm ? this.swarm.getStats() : null
     };
   }
 
