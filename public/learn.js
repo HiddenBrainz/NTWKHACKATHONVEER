@@ -70,6 +70,15 @@ const LESSONS = [
     why: `Defense-in-depth: each fix neutralizes one vector. In the war room, blue agents deploy exactly these — and you can watch an attack get <b>403 BLOCKED</b> live. Great defenders understand attacks; that's why you learned offense first.`,
   },
   {
+    id: 'defend-build',
+    goal: 'Defend against AI attackers',
+    title: 'Build Your Defense 🛡️',
+    intro: `Flip sides for real. Here's a vulnerable server. <b>You</b> choose which defenses to deploy — then a swarm of <b>AI red agents attacks it</b>. Did your defenses hold?`,
+    task: `Toggle the structural fixes you think will stop each attack, then deploy. You want the AI to be <b>blocked</b>, not breach you.`,
+    build: true,
+    why: `You just played blue team — and learned that the <b>right</b> structural fix (parameterized queries, path normalization, prompt hardening) actually neutralizes the attack, while the wrong one leaves you exposed. That's defense-in-depth.`,
+  },
+  {
     id: 'duel',
     goal: 'Beat a live AI defender',
     title: 'You vs the AI 🤖',
@@ -181,7 +190,22 @@ function renderLesson() {
   let html = `<p>${l.intro}</p>`;
   if (l.task) html += `<div class="task"><div class="tl">your task</div>${l.task}</div>`;
 
-  if (l.quiz) {
+  if (l.build) {
+    // Defense challenge: user toggles strengths on a vulnerable node.
+    const defenses = [
+      { id: 'PARAMETERIZED_QUERY', stops: 'SQL_INJECTION', label: 'Parameterized Queries', desc: 'binds input as data' },
+      { id: 'PATH_NORMALIZATION', stops: 'PATH_TRAVERSAL', label: 'Path Normalization', desc: 'confines to web root' },
+      { id: 'PROMPT_HARDENING', stops: 'PROMPT_INJECTION', label: 'Prompt Hardening', desc: 'fences untrusted input' },
+    ];
+    html += `<div class="def-node">🖥️ <b>your-server</b> — weak to: <span class="red">SQLi, path traversal, prompt injection</span></div>`;
+    html += `<div class="def-grid">` + defenses.map(d =>
+      `<button class="def-toggle" data-def="${d.id}">
+         <span class="def-name">${d.label}</span>
+         <span class="def-desc">${d.desc}</span>
+       </button>`).join('') + `</div>`;
+    html += `<button id="deployBtn" class="deploy-btn">🛡️ deploy defenses & face the AI swarm</button>`;
+    html += `<div class="result" id="result"></div>`;
+  } else if (l.quiz) {
     html += `<div style="margin-top:8px">`;
     l.quiz.forEach(q => {
       html += `<p><b class="red">${q.q}</b> <span class="grn">${q.a}</span></p>`;
@@ -211,6 +235,15 @@ function renderLesson() {
     else finishCourse();
   });
   document.getElementById('summonBtn')?.addEventListener('click', () => summonAgent(l));
+
+  // build-a-defense interactions
+  const chosen = new Set();
+  stageBody.querySelectorAll('.def-toggle').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.def;
+    if (chosen.has(id)) { chosen.delete(id); b.classList.remove('on'); }
+    else { chosen.add(id); b.classList.add('on'); }
+  }));
+  document.getElementById('deployBtn')?.addEventListener('click', () => runDefenseChallenge(l, [...chosen]));
 
   // reset per-lesson scoring timers
   game.lessonStart = Date.now();
@@ -344,6 +377,48 @@ async function summonAgent(l) {
     tutorSay('bot', `I solved it with <code>${escHtml(d.payload)}</code>. ${stripTags(d.explain)} Try running it yourself now.`);
   } catch (e) {
     result.innerHTML = `<span class="amb">the AI agent hit an error — try again</span>`;
+  }
+}
+
+// Defense challenge: build a node with the user's chosen strengths, run the AI
+// swarm against it, and score by how many attacks their config neutralized.
+async function runDefenseChallenge(l, strengths) {
+  const result = document.getElementById('result');
+  result.className = 'result show';
+  result.innerHTML = `<div class="ai-think">🤖 <span class="dim">deploying your defenses, launching the AI red swarm…</span></div>`;
+
+  const scenario = {
+    id: 'custom', name: 'Your Defended Server',
+    config: { redCount: 3, blueCount: 0, rounds: 1, llmMode: 'fast' },
+    nodes: [
+      { id: 'target', label: 'gateway', isTarget: true, weaknesses: [], strengths: [] },
+      { id: 'srv', label: 'your-server',
+        weaknesses: ['SQL_INJECTION', 'PATH_TRAVERSAL', 'PROMPT_INJECTION'],
+        strengths, secret: 'CROWN_JEWELS', difficulty: 2 },
+    ],
+  };
+  try {
+    await fetch('/api/scenario', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scenario }) });
+    await fetch('/api/trigger-breach', { method: 'POST' });
+    // Let the swarm run, then read the real score.
+    await new Promise(r => setTimeout(r, 14000));
+    const score = await (await fetch('/api/score')).json();
+    const planted = 3, blocked = (score.breakdown || []).filter(b => b.neutralized).length;
+    const breached = (score.breakdown || []).filter(b => b.found).length;
+    const held = blocked, win = breached === 0;
+
+    result.className = 'result show ' + (win ? 'win' : 'fail');
+    result.innerHTML = `<b class="${win ? 'grn' : 'amb'}">${win ? '🛡️ DEFENSES HELD!' : '💥 BREACHED'}</b> —
+      your config blocked <b>${held}/${planted}</b> attack types; the AI broke through <b>${breached}</b>.
+      <div class="why">${win
+        ? `Perfect — every structural fix matched its attack. ${l.why}`
+        : `Some attacks got through. Each weakness needs its <i>matching</i> fix — SQLi needs parameterized queries, traversal needs path normalization, prompt injection needs prompt hardening. Pick the missing ones and try again.`}</div>`;
+    if (win && !done.has(l.id)) { markDone(l); awardXP(60, 'defended your server'); document.getElementById('nextBtn').classList.add('show'); }
+    tutorSay('bot', win
+      ? `🛡️ You held off the AI swarm completely. That's defense-in-depth done right.`
+      : `The AI got through ${breached} way(s). Match each defense to its attack and redeploy — you'll get it.`);
+  } catch (e) {
+    result.innerHTML = `<span class="amb">challenge error — try again</span>`;
   }
 }
 

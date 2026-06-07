@@ -272,6 +272,12 @@ export class SwarmOrchestrator {
     return this.nodeByVector[vector] || this.scenario.nodes.find(n => n.isTarget)?.label || 'target';
   }
 
+  /** True if the scenario node carrying this vector has a neutralizing strength. */
+  _vectorNeutralized(vector) {
+    const w = this.weaknesses.find(x => x.vector === vector);
+    return Boolean(w && w.neutralized);
+  }
+
   /**
    * Build a REAL request/response transcript for the UI. For genuine endpoints
    * this is the actual payload sent and the actual JSON the server returned
@@ -408,9 +414,19 @@ export class SwarmOrchestrator {
         // Real vectors hit genuine vulnerable code; simulated ones resolve from
         // the scenario node's weakness/strength tags + a difficulty roll.
         const target = this._resolveTarget(attackType, plan.target);
-        const result = target?.simulated
-          ? await this._simulateAttack(attackType, agent)
-          : await agent.executeAttack(target, attackType);
+        let result;
+        // STRENGTH GATE: if the scenario node carrying this vector ships a
+        // matching structural strength, the attack is neutralized — even on a
+        // real endpoint. This is what lets a user's chosen defenses actually
+        // hold against the swarm (the build-a-defense challenge).
+        if (this._vectorNeutralized(attackType)) {
+          result = { success: false, blockedByDefense: true,
+                     defense: 'structural strength on the node', message: 'neutralized by node strength' };
+        } else {
+          result = target?.simulated
+            ? await this._simulateAttack(attackType, agent)
+            : await agent.executeAttack(target, attackType);
+        }
 
         this.stats.attacksAttempted++;
 
