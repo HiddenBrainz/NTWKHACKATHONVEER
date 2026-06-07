@@ -117,6 +117,12 @@ app.get('/api/swarm/report', (req, res) => {
   res.json(report || { message: 'No active swarm' });
 });
 
+// Eval scorecard — grade the most recent run against the weakness manifest.
+// This is the benchmark/arena core: a reproducible score for any agent's run.
+app.get('/api/score', (req, res) => {
+  res.json(swarmController.scoreRun());
+});
+
 // Judge an interactive attack (user plays as attacker)
 app.post('/api/judge-attack', async (req, res) => {
   const { payload } = req.body;
