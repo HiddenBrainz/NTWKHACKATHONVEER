@@ -153,7 +153,7 @@ body::after {
 /* agents */
 .agents { padding: 8px; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
 .agent {
-  display: grid; grid-template-columns: 8px 46px 1fr 60px; align-items: center; gap: 8px;
+  display: grid; grid-template-columns: 8px 46px 1fr; align-items: center; gap: 8px;
   padding: 6px 8px; border-radius: 5px; font-size: 11px;
   border: 1px solid transparent;
 }
@@ -166,7 +166,7 @@ body::after {
 .agent.red  .id { color: var(--red); }
 .agent.blue .id { color: var(--blu); }
 .agent .st { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; color: var(--dim-2); text-align: right; white-space: nowrap; }
-.agent .bar { grid-column: 2 / 5; height: 2px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
+.agent .bar { grid-column: 1 / 4; height: 2px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; margin-top: 4px; }
 .agent .bar > i { display: block; height: 100%; width: 5%; transition: width 0.5s ease; }
 .agent.red  .bar > i { background: var(--red); }
 .agent.blue .bar > i { background: var(--blu); }
